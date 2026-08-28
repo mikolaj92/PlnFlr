@@ -3,4 +3,49 @@
 .pln-preview {
   width: 100%;
   max-height: 80vh;
+  background: color-mix(in oklab, var(--background) 92%, var(--muted));
+  border: 1px solid var(--border);
+}
+
+.pln-stage {
+  overflow: auto;
+}
+
+.pln-room {
+  fill: color-mix(in oklab, var(--muted) 70%, var(--background));
+  stroke: var(--foreground);
+  stroke-width: 8;
+}
+
+.pln-gap {
+  fill: color-mix(in oklab, var(--destructive, #b91c1c) 18%, transparent);
+  pointer-events: none;
+}
+
+.pln-row-even {
+  fill: color-mix(in oklab, #b45309 55%, white);
+  stroke: #7c2d12;
+  stroke-width: 4;
+}
+
+.pln-row-odd {
+  fill: color-mix(in oklab, #d97706 40%, white);
+  stroke: #7c2d12;
+  stroke-width: 4;
+}
+
+.pln-clip {
+  fill-opacity: 0.92;
+  stroke-dasharray: 12 8;
+}
+
+.pln-label {
+  font-size: 90px;
+  fill: #1c1917;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  pointer-events: none;
+}
+
+[x-cloak] {
+  display: none !important;
 }

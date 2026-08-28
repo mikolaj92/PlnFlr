@@ -1,0 +1,64 @@
+<section class="app-stack" id="plan-result">
+  {% if error %}
+  <div class="card" data-variant="destructive">
+    <div class="card-header">
+      <h2 class="card-title">Nie da się rozłożyć</h2>
+      <p class="card-description">{{ error }}</p>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Podgląd instalacji</h2>
+      <p class="card-description">{{ plan.rationale_pl }}</p>
+    </div>
+    <div class="card-content pln-stage">
+      {{ svg | safe }}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Ilość</h2>
+    </div>
+    <div class="card-content">
+      <div class="table-container app-table-wrap">
+        <table class="table">
+          <tbody>
+            <tr><th>Sztuki na podłodze</th><td>{{ plan.bom.pieces }}</td></tr>
+            <tr><th>Desek / płytek do kupienia</th><td>{{ plan.bom.full_boards }}</td></tr>
+            {% if plan.bom.packs %}<tr><th>Paczek</th><td>{{ plan.bom.packs }}</td></tr>{% endif %}
+            <tr><th>Pole netto</th><td>{{ net_m2 }} m²</td></tr>
+            <tr><th>Odpad</th><td>{{ plan.bom.waste_pct }}%</td></tr>
+            <tr><th>Dylatacja</th><td>{{ plan.gap_mm }} mm</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% if plan.warnings %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Uwagi majstra</h2></div>
+    <div class="card-content">
+      <ul class="app-stack app-stack--tight">
+        {% for warning in plan.warnings %}
+        <li>{{ warning.message_pl }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Kolejność ułożenia</h2></div>
+    <div class="card-content">
+      <ol class="app-stack app-stack--tight">
+        {% for line in plan.rows_instruction_pl %}
+        <li>{{ line }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  {% endif %}
+</section>

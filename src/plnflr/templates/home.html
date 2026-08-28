@@ -1,21 +1,135 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="app-stack">
+<section class="app-stack" x-data="{ shape: 'rect', kind: 'plank' }">
   <div class="card">
     <div class="card-header">
-      <h1 class="card-title">PlnFlr</h1>
+      <h1 class="card-title">Rozłóż podłogę</h1>
       <p class="card-description">
-        Plan ułożenia podłogi: obrys pomieszczenia, deska albo kafel, dylatacje,
-        docinki i podgląd całej instalacji. Silnik rozkładu jest w kolejce.
+        Podaj obrys i deskę albo kafel. Dostaniesz dylatację, siatkę, docinki,
+        ilość i podgląd całej instalacji.
       </p>
     </div>
-    <div class="card-content app-stack">
-      <p>
-        Host wstaje na chrome app-factory. Rozkład desek i kafli, SVG planu oraz BOM
-        dojdą z kolejnych issue.
-      </p>
+    <div class="card-content">
+      <form
+        class="app-stack"
+        hx-post="/plan"
+        hx-target="#plan-panel"
+        hx-swap="innerHTML"
+      >
+        <fieldset class="app-stack app-stack--tight">
+          <legend class="text-sm font-medium">Kształt</legend>
+          <div class="app-cluster">
+            <label class="text-sm"><input type="radio" name="shape" value="rect" x-model="shape" checked> Prostokąt</label>
+            <label class="text-sm"><input type="radio" name="shape" value="l" x-model="shape"> Litera L</label>
+            <label class="text-sm"><input type="radio" name="shape" value="polygon" x-model="shape"> Wielokąt</label>
+          </div>
+        </fieldset>
+
+        <div class="app-card-grid" x-show="shape === 'rect'">
+          <label class="app-stack app-stack--tight" for="width_m">
+            <span class="text-sm font-medium">Szerokość (m)</span>
+            <input id="width_m" class="input" name="width_m" value="4.000" inputmode="decimal">
+          </label>
+          <label class="app-stack app-stack--tight" for="height_m">
+            <span class="text-sm font-medium">Długość (m)</span>
+            <input id="height_m" class="input" name="height_m" value="3.000" inputmode="decimal">
+          </label>
+        </div>
+
+        <div class="app-card-grid" x-show="shape === 'l'" x-cloak>
+          <label class="app-stack app-stack--tight" for="l_span_x_m">
+            <span class="text-sm font-medium">Rozpiętość X (m)</span>
+            <input id="l_span_x_m" class="input" name="l_span_x_m" value="6.000">
+          </label>
+          <label class="app-stack app-stack--tight" for="l_span_y_m">
+            <span class="text-sm font-medium">Rozpiętość Y (m)</span>
+            <input id="l_span_y_m" class="input" name="l_span_y_m" value="4.000">
+          </label>
+          <label class="app-stack app-stack--tight" for="l_cutout_x_m">
+            <span class="text-sm font-medium">Wycięcie X (m)</span>
+            <input id="l_cutout_x_m" class="input" name="l_cutout_x_m" value="2.500">
+          </label>
+          <label class="app-stack app-stack--tight" for="l_cutout_y_m">
+            <span class="text-sm font-medium">Wycięcie Y (m)</span>
+            <input id="l_cutout_y_m" class="input" name="l_cutout_y_m" value="2.000">
+          </label>
+        </div>
+
+        <label class="app-stack app-stack--tight" for="vertices" x-show="shape === 'polygon'" x-cloak>
+          <span class="text-sm font-medium">Wierzchołki (m), jeden na linię: x,y</span>
+          <textarea id="vertices" class="input" name="vertices" rows="6">0,0
+4,0
+4,2
+1.5,2
+1.5,3
+0,3</textarea>
+        </label>
+
+        <fieldset class="app-stack app-stack--tight">
+          <legend class="text-sm font-medium">Materiał</legend>
+          <div class="app-cluster">
+            <label class="text-sm"><input type="radio" name="kind" value="plank" x-model="kind" checked> Deska / panel</label>
+            <label class="text-sm"><input type="radio" name="kind" value="tile" x-model="kind"> Płytka</label>
+          </div>
+        </fieldset>
+
+        <div class="app-card-grid" x-show="kind === 'plank'">
+          <label class="app-stack app-stack--tight" for="plank_length_m">
+            <span class="text-sm font-medium">Długość deski (m)</span>
+            <input id="plank_length_m" class="input" name="plank_length_m" value="1.383">
+          </label>
+          <label class="app-stack app-stack--tight" for="plank_width_m">
+            <span class="text-sm font-medium">Szerokość deski (m)</span>
+            <input id="plank_width_m" class="input" name="plank_width_m" value="0.156">
+          </label>
+          <label class="app-stack app-stack--tight" for="boards_per_pack">
+            <span class="text-sm font-medium">Sztuk w paczce</span>
+            <input id="boards_per_pack" class="input" name="boards_per_pack" value="8">
+          </label>
+        </div>
+
+        <div class="app-card-grid" x-show="kind === 'tile'" x-cloak>
+          <label class="app-stack app-stack--tight" for="tile_length_m">
+            <span class="text-sm font-medium">Długość płytki (m)</span>
+            <input id="tile_length_m" class="input" name="tile_length_m" value="0.600">
+          </label>
+          <label class="app-stack app-stack--tight" for="tile_width_m">
+            <span class="text-sm font-medium">Szerokość płytki (m)</span>
+            <input id="tile_width_m" class="input" name="tile_width_m" value="0.600">
+          </label>
+          <label class="app-stack app-stack--tight" for="grout_mm">
+            <span class="text-sm font-medium">Fuga (mm)</span>
+            <input id="grout_mm" class="input" name="grout_mm" value="3">
+          </label>
+        </div>
+
+        <div class="app-card-grid">
+          <label class="app-stack app-stack--tight" for="expansion_mm">
+            <span class="text-sm font-medium">Dylatacja (mm, puste = auto)</span>
+            <input id="expansion_mm" class="input" name="expansion_mm" placeholder="auto">
+          </label>
+          <label class="app-stack app-stack--tight" for="direction">
+            <span class="text-sm font-medium">Kierunek</span>
+            <select id="direction" class="input" name="direction">
+              <option value="along_long">Wzdłuż dłuższego boku</option>
+              <option value="along_short">Wzdłuż krótszego boku</option>
+            </select>
+          </label>
+          <label class="app-stack app-stack--tight" for="stagger" x-show="kind === 'plank'">
+            <span class="text-sm font-medium">Przesunięcie spoin</span>
+            <select id="stagger" class="input" name="stagger">
+              <option value="third">1/3</option>
+              <option value="half">1/2 (cegiełka)</option>
+            </select>
+          </label>
+        </div>
+
+        <button class="btn" type="submit" data-variant="primary">Rozłóż podłogę</button>
+      </form>
     </div>
   </div>
+
+  <div id="plan-panel"></div>
 </section>
 {% endblock %}
