@@ -1,0 +1,6 @@
+/* Product-only styles. Chrome/Basecoat come from /static/platform. */
+
+.pln-preview {
+  width: 100%;
+  max-height: 80vh;
+}

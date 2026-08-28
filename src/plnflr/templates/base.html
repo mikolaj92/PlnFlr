@@ -1,0 +1,9 @@
+{% extends "app_factory/product_shell.html" %}
+
+{% block title %}PlnFlr{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+{% endblock %}
+
+{% block loading_label %}Ładowanie…{% endblock %}

@@ -1,0 +1,60 @@
+[project]
+name = "plnflr"
+version = "0.1.0"
+description = "Plan ułożenia podłogi: dylatacje, docinki, BOM i podgląd całej instalacji."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "PlnFlr contributors" }]
+dependencies = [
+  "app-factory[platform]",
+  "fastapi>=0.115.0",
+  "jinja2>=3.1.0",
+  "pydantic>=2.10.0",
+  "pyclipper>=1.3.0",
+  "python-multipart>=0.0.12",
+  "uvicorn[standard]>=0.34.0",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0",
+  "pytest>=8.3.0",
+  "ruff>=0.9.0",
+]
+
+[tool.uv.sources]
+app-factory = { git = "https://github.com/mikolaj92/app-factory", tag = "v0.5.19" }
+
+[tool.uv]
+override-dependencies = [
+  "app-factory @ git+https://github.com/mikolaj92/app-factory.git@v0.5.19",
+]
+
+[project.scripts]
+plnflr = "plnflr.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plnflr"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/plnflr/templates" = "plnflr/templates"
+"src/plnflr/static" = "plnflr/static"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
