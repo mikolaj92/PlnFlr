@@ -8,19 +8,23 @@ from pydantic import BaseModel
 
 from plnflr.domain.constructors import l_shape, rectangle
 from plnflr.domain.models import (
+    LayoutPlan,
     LayoutRules,
     PlankSpec,
     Ring,
     Room,
     TileSpec,
     Vertex,
+    Zone,
 )
 from plnflr.domain.units import metres_to_mm
+from plnflr.engine.layout import layout_floor
 
 
 class LayoutForm(BaseModel):
     shape: Literal["rect", "l", "polygon"] = "rect"
     kind: Literal["plank", "tile"] = "plank"
+    kind_b: Literal["plank", "tile"] = "tile"
     width_m: str = "4.000"
     height_m: str = "3.000"
     l_span_x_m: str = "6.000"
@@ -37,6 +41,9 @@ class LayoutForm(BaseModel):
     expansion_mm: str = ""
     direction: Literal["along_long", "along_short"] = "along_long"
     stagger: Literal["third", "half"] = "third"
+    angle_deg: str = "0"
+    split: Literal["none", "x", "y"] = "none"
+    split_at_m: str = ""
 
 
 def _positive_int(raw: str, *, field: str) -> int | None:
@@ -50,6 +57,15 @@ def _positive_int(raw: str, *, field: str) -> int | None:
     if value <= 0:
         raise ValueError(f"{field} musi być dodatnie")
     return value
+
+
+def _angle_deg(raw: str) -> int:
+    text = raw.strip() or "0"
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise ValueError("kąt musi być liczbą całkowitą w stopniach") from exc
+    return value % 360
 
 
 def parse_vertices(raw: str) -> Ring:
@@ -89,6 +105,7 @@ def rules_from_form(form: LayoutForm) -> LayoutRules:
         expansion_mm=expansion,
         stagger=form.stagger,
         direction=form.direction,
+        angle_deg=_angle_deg(form.angle_deg),
     )
 
 
@@ -107,4 +124,29 @@ def tile_from_form(form: LayoutForm) -> TileSpec:
         length_mm=metres_to_mm(form.tile_length_m),
         width_mm=metres_to_mm(form.tile_width_m),
         grout_mm=grout,
+    )
+
+
+def _zone(form: LayoutForm, kind: Literal["plank", "tile"], label: str) -> Zone:
+    if kind == "tile":
+        return Zone(kind="tile", tile=tile_from_form(form), label=label)
+    return Zone(kind="plank", plank=plank_from_form(form), label=label)
+
+
+def layout_from_form(form: LayoutForm) -> LayoutPlan:
+    room = room_from_form(form)
+    rules = rules_from_form(form)
+    if form.split == "none":
+        label = "Płytki" if form.kind == "tile" else "Panele"
+        return layout_floor(room, (_zone(form, form.kind, label),), rules)
+    split_at = metres_to_mm(form.split_at_m) if form.split_at_m.strip() else None
+    return layout_floor(
+        room,
+        (
+            _zone(form, form.kind, "Strefa A"),
+            _zone(form, form.kind_b, "Strefa B"),
+        ),
+        rules,
+        split_axis=form.split,
+        split_at_mm=split_at,
     )

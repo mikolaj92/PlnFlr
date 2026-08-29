@@ -14,7 +14,7 @@ uv run plnflr
 uv run pytest
 ```
 
-v0.1: lista pokoi jednego otwartego użytkownika, siatka osiowo-prostokątna, clip do obrysu. Bez 3D, jodełki i kont. Później każdy user dostaje własne pokoje.
+v0.1: lista pokoi jednego otwartego użytkownika. User podaje obrys, kąt i ewentualną podziałkę (np. pół kafelki, pół panele); serwer liczy dylatację, siatkę, docinki, BOM i kolejność. Bez 3D i kont.
 
 ## Live
 

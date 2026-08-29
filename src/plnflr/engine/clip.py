@@ -102,6 +102,19 @@ def _paths(solution: Sequence[Sequence[Point]]) -> tuple[Path, ...]:
     return tuple(tuple((int(x), int(y)) for x, y in poly) for poly in solution if len(poly) >= 3)
 
 
+def intersect_polygon(subject: Sequence[Point], clip: Sequence[Point]) -> tuple[Path, ...]:
+    pc = pyclipper.Pyclipper()
+    pc.AddPath(list(_clean(subject)), pyclipper.PT_SUBJECT, True)
+    pc.AddPath(list(normalize_ring(_clean(clip))), pyclipper.PT_CLIP, True)
+    return _paths(
+        pc.Execute(
+            pyclipper.CT_INTERSECTION,
+            pyclipper.PFT_NONZERO,
+            pyclipper.PFT_NONZERO,
+        )
+    )
+
+
 def intersect_rect(
     rect: Sequence[Point],
     outer: Sequence[Point],

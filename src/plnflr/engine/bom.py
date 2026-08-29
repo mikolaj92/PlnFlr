@@ -21,6 +21,8 @@ def make_bom(
     boards_per_pack: int | None,
     area_net_mm2: int,
     board_area_mm2: int,
+    label: str = "",
+    kind: str = "plank",
 ) -> BillOfMaterials:
     bought = full_boards * board_area_mm2
     packs = None
@@ -33,4 +35,6 @@ def make_bom(
         area_net_mm2=area_net_mm2,
         area_bought_mm2=bought,
         waste_pct=waste_pct(bought, area_net_mm2),
+        label=label,
+        kind=kind,  # type: ignore[arg-type]
     )

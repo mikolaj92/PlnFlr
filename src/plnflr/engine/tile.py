@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from plnflr.domain.models import (
     LayoutPlan,
     LayoutRules,
@@ -14,11 +16,10 @@ from plnflr.engine.bom import make_bom
 from plnflr.engine.clip import area_mm2, intersect_rect, ring_to_tuple
 from plnflr.engine.expansion import bbox, inset_room, resolve_gap_mm
 from plnflr.engine.instructions import instructions_for
+from plnflr.engine.rotate import origin_of, rotate_points, rotate_room
 
 
-def layout_tiles(room: Room, spec: TileSpec, rules: LayoutRules) -> LayoutPlan:
-    gap = resolve_gap_mm(room, rules)
-    inner = inset_room(room, gap)
+def _lay_axis(inner: Room, spec: TileSpec, rules: LayoutRules) -> tuple[Piece, ...]:
     min_x, min_y, max_x, max_y = bbox(inner)
     inner_w = max_x - min_x
     inner_h = max_y - min_y
@@ -28,7 +29,6 @@ def layout_tiles(room: Room, spec: TileSpec, rules: LayoutRules) -> LayoutPlan:
     rows = max(1, (inner_h + spec.grout_mm) // pitch_y)
     used_w = cols * spec.length_mm + (cols - 1) * spec.grout_mm
     used_h = rows * spec.width_mm + (rows - 1) * spec.grout_mm
-    # If remainder on an edge is too small, add a column/row so cuts grow.
     rem_x = inner_w - used_w
     rem_y = inner_h - used_h
     if 0 < rem_x < rules.min_tile_cut_mm:
@@ -72,24 +72,56 @@ def layout_tiles(room: Room, spec: TileSpec, rules: LayoutRules) -> LayoutPlan:
                         width_mm=spec.width_mm,
                     )
                 )
+    return tuple(pieces)
+
+
+def layout_tiles(room: Room, spec: TileSpec, rules: LayoutRules) -> LayoutPlan:
+    gap = resolve_gap_mm(room, rules)
+    inner = inset_room(room, gap)
+    angle = int(rules.angle_deg) % 360
+    origin = origin_of(inner)
+    grid_room = rotate_room(inner, angle, origin) if angle else inner
+    pieces = _lay_axis(grid_room, spec, rules)
+    if angle:
+        pieces = tuple(
+            replace(
+                piece,
+                geometry=tuple(
+                    Vertex(x, y)
+                    for x, y in rotate_points(
+                        tuple((v.x_mm, v.y_mm) for v in piece.geometry),
+                        -angle,
+                        origin,
+                    )
+                ),
+            )
+            for piece in pieces
+        )
+    outer_path = ring_to_tuple(inner.outer)
+    hole_paths = tuple(ring_to_tuple(h) for h in inner.holes)
     net = area_mm2(outer_path) - sum(area_mm2(h) for h in hole_paths)
     bom = make_bom(
         pieces=len(pieces),
-        full_boards=board,
+        full_boards=max((p.source_board for p in pieces), default=0),
         boards_per_pack=spec.tiles_per_pack,
         area_net_mm2=net,
         board_area_mm2=spec.length_mm * spec.width_mm,
+        label="Płytki",
+        kind="tile",
     )
+    angle_note = f" Kąt {angle}°." if angle else ""
     return LayoutPlan(
         room=room,
         gap_mm=gap,
         inset=inner,
         direction="along_x",
-        pieces=tuple(pieces),
+        pieces=pieces,
         bom=bom,
         warnings=(),
-        rationale_pl="Siatka płytek wycentrowana na bbox, przycięta do obrysu.",
+        rationale_pl=f"Siatka płytek wycentrowana na bbox, przycięta do obrysu.{angle_note}",
         rows_instruction_pl=instructions_for(
-            tuple(pieces), gap_mm=gap, has_holes=bool(room.holes)
+            pieces, gap_mm=gap, has_holes=bool(room.holes)
         ),
+        angle_deg=angle,
+        boms=(bom,),
     )

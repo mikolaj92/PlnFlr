@@ -43,19 +43,22 @@ def plan_to_svg(plan: LayoutPlan, *, max_px: int = 900) -> str:
         gap_path += " " + _path(hole)
     pieces = []
     for piece in plan.pieces:
-        cls = "pln-row-even" if piece.row_index % 2 == 0 else "pln-row-odd"
+        parity = "pln-row-even" if piece.row_index % 2 == 0 else "pln-row-odd"
+        zone = f"pln-zone-{piece.zone_index}"
+        cls = f"{parity} {zone}"
         if piece.kind in {"clip", "rip", "tile_cut"}:
             cls += " pln-clip"
         pieces.append(
             f'<path class="{cls}" data-piece-id="{piece.piece_id}" '
-            f'd="{_poly_path(piece.geometry)}" />'
+            f'data-zone="{piece.zone_index}" d="{_poly_path(piece.geometry)}" />'
         )
     labels = []
-    seen: set[int] = set()
+    seen: set[tuple[int, int]] = set()
     for piece in plan.pieces:
-        if piece.row_index in seen:
+        key = (piece.zone_index, piece.row_index)
+        if key in seen:
             continue
-        seen.add(piece.row_index)
+        seen.add(key)
         xs = [v.x_mm for v in piece.geometry]
         ys = [v.y_mm for v in piece.geometry]
         cx = (min(xs) + max(xs)) // 2
@@ -64,11 +67,19 @@ def plan_to_svg(plan: LayoutPlan, *, max_px: int = 900) -> str:
             f'<text class="pln-label" x="{cx}" y="{cy}" text-anchor="middle" '
             f'dominant-baseline="middle">{piece.row_index + 1}</text>'
         )
+    extras = []
+    if plan.divider is not None:
+        a, b = plan.divider
+        extras.append(
+            f'<line class="pln-divider" x1="{a.x_mm}" y1="{a.y_mm}" '
+            f'x2="{b.x_mm}" y2="{b.y_mm}" />'
+        )
     body = "\n".join(
         [
             f'<path class="pln-room" fill-rule="evenodd" d="{evenodd}" />',
             f'<path class="pln-gap" fill-rule="evenodd" d="{gap_path}" />',
             *pieces,
+            *extras,
             *labels,
         ]
     )

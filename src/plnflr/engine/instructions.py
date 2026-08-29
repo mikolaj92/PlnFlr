@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 
 from plnflr.domain.models import LayoutPlan, Piece
 
@@ -29,15 +30,8 @@ def instructions_for(pieces: tuple[Piece, ...], *, gap_mm: int, has_holes: bool)
 
 
 def attach(plan: LayoutPlan) -> LayoutPlan:
-    return LayoutPlan(
-        room=plan.room,
-        gap_mm=plan.gap_mm,
-        inset=plan.inset,
-        direction=plan.direction,
-        pieces=plan.pieces,
-        bom=plan.bom,
-        warnings=plan.warnings,
-        rationale_pl=plan.rationale_pl,
+    return replace(
+        plan,
         rows_instruction_pl=instructions_for(
             plan.pieces, gap_mm=plan.gap_mm, has_holes=bool(plan.room.holes)
         ),

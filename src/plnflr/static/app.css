@@ -34,6 +34,22 @@
   stroke-width: 4;
 }
 
+.pln-zone-1.pln-row-even {
+  fill: color-mix(in oklab, #0369a1 55%, white);
+  stroke: #0c4a6e;
+}
+
+.pln-zone-1.pln-row-odd {
+  fill: color-mix(in oklab, #0284c7 40%, white);
+  stroke: #0c4a6e;
+}
+
+.pln-divider {
+  stroke: var(--foreground);
+  stroke-width: 12;
+  stroke-dasharray: 40 24;
+}
+
 .pln-clip {
   fill-opacity: 0.92;
   stroke-dasharray: 12 8;

@@ -43,6 +43,15 @@ class TileSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class Zone:
+    kind: Literal["plank", "tile"]
+    plank: PlankSpec | None = None
+    tile: TileSpec | None = None
+    angle_deg: int | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class LayoutRules:
     expansion_mm: int | None = None
     expansion_min_mm: int = 10
@@ -54,6 +63,7 @@ class LayoutRules:
     direction: Literal["along_long", "along_short", "along_x", "along_y"] = "along_long"
     min_tile_cut_mm: int = 30
     intermediate_joint_mm: int = 8000
+    angle_deg: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +76,7 @@ class Piece:
     install_order: int
     length_mm: int
     width_mm: int
+    zone_index: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +93,8 @@ class BillOfMaterials:
     area_net_mm2: int
     area_bought_mm2: int
     waste_pct: str
+    label: str = ""
+    kind: Literal["plank", "tile", "mixed"] = "plank"
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,3 +108,8 @@ class LayoutPlan:
     warnings: tuple[Warning, ...]
     rationale_pl: str
     rows_instruction_pl: tuple[str, ...]
+    angle_deg: int = 0
+    split_axis: Literal["x", "y"] | None = None
+    split_at_mm: int | None = None
+    boms: tuple[BillOfMaterials, ...] = ()
+    divider: tuple[Vertex, Vertex] | None = None

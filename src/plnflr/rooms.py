@@ -32,6 +32,10 @@ def default_form() -> dict[str, str]:
         "expansion_mm": "",
         "direction": "along_long",
         "stagger": "third",
+        "angle_deg": "0",
+        "split": "none",
+        "split_at_m": "",
+        "kind_b": "tile",
     }
 
 

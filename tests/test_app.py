@@ -27,6 +27,8 @@ def test_home_has_layout_form() -> None:
     assert response.status_code == 200
     assert "Rozłóż podłogę" in response.text
     assert 'hx-post="/rooms/' in response.text
+    assert 'name="angle_deg"' in response.text
+    assert "Podziałka" in response.text
     assert "Silnik rozkładu jest w kolejce" not in response.text
 
 
@@ -50,6 +52,33 @@ def test_plan_rectangle_returns_svg_and_row() -> None:
     assert "<svg" in response.text
     assert "Rząd 1" in response.text
     assert "Paczek" in response.text
+
+
+def test_plan_split_returns_two_zones() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/plan",
+            data={
+                "shape": "rect",
+                "kind": "plank",
+                "kind_b": "tile",
+                "split": "x",
+                "split_at_m": "2.000",
+                "width_m": "4.000",
+                "height_m": "3.000",
+                "plank_length_m": "1.383",
+                "plank_width_m": "0.156",
+                "boards_per_pack": "8",
+                "tile_length_m": "0.600",
+                "tile_width_m": "0.600",
+                "grout_mm": "3",
+                "angle_deg": "0",
+            },
+        )
+    assert response.status_code == 200
+    assert "pln-divider" in response.text
+    assert "Strefa A" in response.text
+    assert "Strefa B" in response.text
 
 
 def test_plan_l_shape_returns_svg() -> None:

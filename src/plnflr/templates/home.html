@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="app-stack" x-data="{ shape: '{{ form.shape }}', kind: '{{ form.kind }}' }">
+<section class="app-stack" x-data="{ shape: '{{ form.shape }}', kind: '{{ form.kind }}', split: '{{ form.split }}' }">
   <div class="card">
     <div class="card-header">
       <h1 class="card-title">{{ room.name }}</h1>
       <p class="card-description">
-        Podaj obrys i deskę albo kafel. Dostaniesz dylatację, siatkę, docinki,
-        ilość i podgląd całej instalacji. Każdy pokój ma własne wymiary.
+        Ty podajesz obrys, kąt i ewentualną podziałkę. Komputer liczy dylatację,
+        siatkę, docinki, ilość i kolejność. Podziałka: np. pół kafelki, pół panele.
       </p>
     </div>
     <div class="card-content">
@@ -72,7 +72,7 @@
           </div>
         </fieldset>
 
-        <div class="app-card-grid" x-show="kind === 'plank'">
+        <div class="app-card-grid" x-show="kind === 'plank' || split !== 'none'">
           <label class="app-stack app-stack--tight" for="plank_length_m">
             <span class="text-sm font-medium">Długość deski (m)</span>
             <input id="plank_length_m" class="input" name="plank_length_m" value="{{ form.plank_length_m }}">
@@ -87,7 +87,7 @@
           </label>
         </div>
 
-        <div class="app-card-grid" x-show="kind === 'tile'" x-cloak>
+        <div class="app-card-grid" x-show="kind === 'tile' || split !== 'none'" x-cloak>
           <label class="app-stack app-stack--tight" for="tile_length_m">
             <span class="text-sm font-medium">Długość płytki (m)</span>
             <input id="tile_length_m" class="input" name="tile_length_m" value="{{ form.tile_length_m }}">
@@ -119,6 +119,33 @@
             <select id="stagger" class="input" name="stagger">
               <option value="third"{% if form.stagger == 'third' %} selected{% endif %}>1/3</option>
               <option value="half"{% if form.stagger == 'half' %} selected{% endif %}>1/2 (cegiełka)</option>
+            </select>
+          </label>
+          <label class="app-stack app-stack--tight" for="angle_deg">
+            <span class="text-sm font-medium">Kąt siatki (°)</span>
+            <input id="angle_deg" class="input" name="angle_deg" value="{{ form.angle_deg }}" inputmode="numeric">
+          </label>
+        </div>
+
+        <fieldset class="app-stack app-stack--tight">
+          <legend class="text-sm font-medium">Podziałka</legend>
+          <div class="app-cluster">
+            <label class="text-sm"><input type="radio" name="split" value="none" x-model="split"{% if form.split == 'none' %} checked{% endif %}> Cały pokój jednym materiałem</label>
+            <label class="text-sm"><input type="radio" name="split" value="x" x-model="split"{% if form.split == 'x' %} checked{% endif %}> Linia pionowa</label>
+            <label class="text-sm"><input type="radio" name="split" value="y" x-model="split"{% if form.split == 'y' %} checked{% endif %}> Linia pozioma</label>
+          </div>
+        </fieldset>
+
+        <div class="app-card-grid" x-show="split !== 'none'" x-cloak>
+          <label class="app-stack app-stack--tight" for="split_at_m">
+            <span class="text-sm font-medium">Linia od krawędzi (m, puste = środek)</span>
+            <input id="split_at_m" class="input" name="split_at_m" value="{{ form.split_at_m }}" placeholder="auto">
+          </label>
+          <label class="app-stack app-stack--tight" for="kind_b">
+            <span class="text-sm font-medium">Druga strefa</span>
+            <select id="kind_b" class="input" name="kind_b">
+              <option value="plank"{% if form.kind_b == 'plank' %} selected{% endif %}>Deska / panel</option>
+              <option value="tile"{% if form.kind_b == 'tile' %} selected{% endif %}>Płytka</option>
             </select>
           </label>
         </div>

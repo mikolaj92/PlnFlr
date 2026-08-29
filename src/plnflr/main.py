@@ -13,15 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
-from plnflr.engine.plank import layout_planks
-from plnflr.engine.tile import layout_tiles
-from plnflr.forms import (
-    LayoutForm,
-    plank_from_form,
-    room_from_form,
-    rules_from_form,
-    tile_from_form,
-)
+from plnflr.forms import LayoutForm, layout_from_form
 from plnflr.platform_chrome import install_platform_chrome, platform_request_context
 from plnflr.render.svg import plan_to_svg
 from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
@@ -75,6 +67,10 @@ def _layout_form(**fields: str) -> LayoutForm:
         expansion_mm=defaults["expansion_mm"],
         direction=defaults["direction"],  # type: ignore[arg-type]
         stagger=defaults["stagger"],  # type: ignore[arg-type]
+        angle_deg=defaults.get("angle_deg", "0"),
+        split=defaults.get("split", "none"),  # type: ignore[arg-type]
+        split_at_m=defaults.get("split_at_m", ""),
+        kind_b=defaults.get("kind_b", "tile"),  # type: ignore[arg-type]
     )
 
 
@@ -98,6 +94,10 @@ def _form_payload(
     expansion_mm: str,
     direction: str,
     stagger: str,
+    angle_deg: str = "0",
+    split: str = "none",
+    split_at_m: str = "",
+    kind_b: str = "tile",
 ) -> dict[str, str]:
     return {
         "shape": shape,
@@ -118,6 +118,10 @@ def _form_payload(
         "expansion_mm": expansion_mm,
         "direction": direction,
         "stagger": stagger,
+        "angle_deg": angle_deg,
+        "split": split,
+        "split_at_m": split_at_m,
+        "kind_b": kind_b,
     }
 
 
@@ -197,6 +201,10 @@ def plan_room(
     expansion_mm: str = Form(""),
     direction: str = Form("along_long"),
     stagger: str = Form("third"),
+    angle_deg: str = Form("0"),
+    split: str = Form("none"),
+    split_at_m: str = Form(""),
+    kind_b: str = Form("tile"),
 ):
     saved = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
     if saved is None:
@@ -220,15 +228,14 @@ def plan_room(
         expansion_mm=expansion_mm,
         direction=direction,
         stagger=stagger,
+        angle_deg=angle_deg,
+        split=split,
+        split_at_m=split_at_m,
+        kind_b=kind_b,
     )
     try:
         form = _layout_form(**payload)
-        room = room_from_form(form)
-        rules = rules_from_form(form)
-        if form.kind == "tile":
-            laid = layout_tiles(room, tile_from_form(form), rules)
-        else:
-            laid = layout_planks(room, plank_from_form(form), rules)
+        laid = layout_from_form(form)
     except (ValueError, ValidationError, InvalidOperation) as exc:
         return _error_fragment(request, str(exc) or "Niepoprawne wymiary.")
     ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=payload)
@@ -267,6 +274,10 @@ def plan_legacy(
     expansion_mm: str = Form(""),
     direction: str = Form("along_long"),
     stagger: str = Form("third"),
+    angle_deg: str = Form("0"),
+    split: str = Form("none"),
+    split_at_m: str = Form(""),
+    kind_b: str = Form("tile"),
 ):
     room = ROOM_STORE.ensure_default(OPEN_USER_ID)
     return plan_room(
@@ -290,6 +301,10 @@ def plan_legacy(
         expansion_mm=expansion_mm,
         direction=direction,
         stagger=stagger,
+        angle_deg=angle_deg,
+        split=split,
+        split_at_m=split_at_m,
+        kind_b=kind_b,
     )
 
 

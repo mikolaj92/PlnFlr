@@ -31,11 +31,39 @@
             <tr><th>Pole netto</th><td>{{ net_m2 }} m²</td></tr>
             <tr><th>Odpad</th><td>{{ plan.bom.waste_pct }}%</td></tr>
             <tr><th>Dylatacja</th><td>{{ plan.gap_mm }} mm</td></tr>
+            {% if plan.angle_deg %}<tr><th>Kąt</th><td>{{ plan.angle_deg }}°</td></tr>{% endif %}
+            {% if plan.split_at_mm is not none %}<tr><th>Podziałka</th><td>{{ plan.split_at_mm }} mm</td></tr>{% endif %}
           </tbody>
         </table>
       </div>
     </div>
   </div>
+
+  {% if plan.boms and plan.boms|length > 1 %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Strefy</h2></div>
+    <div class="card-content">
+      <div class="table-container app-table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Strefa</th><th>Sztuki</th><th>Do kupienia</th><th>Paczki</th><th>Odpad</th></tr>
+          </thead>
+          <tbody>
+            {% for bom in plan.boms %}
+            <tr>
+              <td>{{ bom.label }}</td>
+              <td>{{ bom.pieces }}</td>
+              <td>{{ bom.full_boards }}</td>
+              <td>{{ bom.packs or "—" }}</td>
+              <td>{{ bom.waste_pct }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {% if plan.warnings %}
   <div class="card">
