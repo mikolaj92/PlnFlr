@@ -1,9 +1,9 @@
 {% extends "app_factory/product_shell.html" %}
 
-{% block title %}PlnFlr{% endblock %}
+{% block title %}{% if page_title is defined and page_title %}{{ page_title }} · PlnFlr{% else %}PlnFlr{% endif %}{% endblock %}
 
 {% block head_extra %}
   <link rel="stylesheet" href="/static/app.css">
 {% endblock %}
 
-{% block loading_label %}Ładowanie…{% endblock %}
+{% block loading_overlay %}{% endblock %}

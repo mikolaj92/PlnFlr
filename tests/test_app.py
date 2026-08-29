@@ -11,6 +11,7 @@ def test_home_uses_platform_assets_not_cdn() -> None:
     assert "cdn.jsdelivr.net" not in response.text
     assert "unpkg.com" not in response.text
     assert "PlnFlr" in response.text
+    assert "Pokój 1" in response.text
 
 
 def test_healthz() -> None:
@@ -25,7 +26,7 @@ def test_home_has_layout_form() -> None:
         response = client.get("/")
     assert response.status_code == 200
     assert "Rozłóż podłogę" in response.text
-    assert 'hx-post="/plan"' in response.text
+    assert 'hx-post="/rooms/' in response.text
     assert "Silnik rozkładu jest w kolejce" not in response.text
 
 

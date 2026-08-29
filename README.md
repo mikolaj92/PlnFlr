@@ -14,7 +14,7 @@ uv run plnflr
 uv run pytest
 ```
 
-v0.1: jedno pomieszczenie, siatka osiowo-prostokątna, clip do obrysu. Bez 3D, jodełki i kont.
+v0.1: lista pokoi jednego otwartego użytkownika, siatka osiowo-prostokątna, clip do obrysu. Bez 3D, jodełki i kont. Później każdy user dostaje własne pokoje.
 
 ## Live
 
