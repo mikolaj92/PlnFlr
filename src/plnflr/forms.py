@@ -33,6 +33,8 @@ class LayoutForm(BaseModel):
     l_cutout_x_m: str = "2.500"
     l_cutout_y_m: str = "2.000"
     vertices: str = ""
+    hole_rectangles: str = ""
+    hole_vertices: str = ""
     plank_length_m: str = "1.383"
     plank_width_m: str = "0.156"
     boards_per_pack: str = "8"
@@ -89,17 +91,55 @@ def parse_vertices(raw: str) -> Ring:
     return Ring(tuple(points))
 
 
+def _rectangular_holes(raw: str) -> list[Ring]:
+    holes: list[Ring] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [part.strip() for part in line.replace(";", ",").split(",")]
+        if len(parts) != 4 or any(not part for part in parts):
+            raise ValueError("każdy prostokątny otwór to x,y,szerokość,wysokość w metrach")
+        x, y, width, height = (metres_to_mm(part) for part in parts)
+        holes.append(
+            Ring(
+                (
+                    Vertex(x, y),
+                    Vertex(x + width, y),
+                    Vertex(x + width, y + height),
+                    Vertex(x, y + height),
+                )
+            )
+        )
+    return holes
+
+
+def _polygonal_holes(raw: str) -> list[Ring]:
+    holes: list[Ring] = []
+    lines: list[str] = []
+    for line in (*raw.splitlines(), ""):
+        if line.strip():
+            lines.append(line)
+        elif lines:
+            holes.append(parse_vertices("\n".join(lines)))
+            lines = []
+    return holes
+
+
 def room_from_form(form: LayoutForm) -> Room:
     if form.shape == "rect":
-        return rectangle(metres_to_mm(form.width_m), metres_to_mm(form.height_m))
-    if form.shape == "l":
-        return l_shape(
+        outer = rectangle(metres_to_mm(form.width_m), metres_to_mm(form.height_m)).outer
+    elif form.shape == "l":
+        outer = l_shape(
             span_x_mm=metres_to_mm(form.l_span_x_m),
             span_y_mm=metres_to_mm(form.l_span_y_m),
             cutout_x_mm=metres_to_mm(form.l_cutout_x_m),
             cutout_y_mm=metres_to_mm(form.l_cutout_y_m),
-        )
-    return Room(parse_vertices(form.vertices))
+        ).outer
+    else:
+        outer = parse_vertices(form.vertices)
+    holes = (*_rectangular_holes(form.hole_rectangles), *_polygonal_holes(form.hole_vertices))
+    return Room(outer, holes=holes)
 
 
 def rules_from_form(form: LayoutForm) -> LayoutRules:

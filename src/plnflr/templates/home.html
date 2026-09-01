@@ -65,6 +65,19 @@
         </label>
 
         <fieldset class="app-stack app-stack--tight">
+          <legend class="text-sm font-medium">Otwory (opcjonalne)</legend>
+          <p class="text-sm text-muted-foreground">Dodaj dowolną liczbę otworów jako prostokąty lub wielokąty.</p>
+          <label class="app-stack app-stack--tight" for="hole_rectangles">
+            <span class="text-sm font-medium">Prostokąty (m), jeden na linię: x,y,szerokość,wysokość</span>
+            <textarea id="hole_rectangles" class="input" name="hole_rectangles" rows="3">{{ form.hole_rectangles }}</textarea>
+          </label>
+          <label class="app-stack app-stack--tight" for="hole_vertices">
+            <span class="text-sm font-medium">Wielokąty (m): x,y na linię, pusta linia oddziela otwory</span>
+            <textarea id="hole_vertices" class="input" name="hole_vertices" rows="6">{{ form.hole_vertices }}</textarea>
+          </label>
+        </fieldset>
+
+        <fieldset class="app-stack app-stack--tight">
           <legend class="text-sm font-medium">Materiał</legend>
           <div class="app-cluster">
             <label class="text-sm"><input type="radio" name="kind" value="plank" x-model="kind"{% if form.kind == 'plank' %} checked{% endif %}> Deska / panel</label>
