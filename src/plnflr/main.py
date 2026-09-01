@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
-from plnflr.forms import LayoutForm, layout_from_form
+from plnflr.forms import layout_form_from_request, layout_from_form
 from plnflr.platform_chrome import install_platform_chrome, platform_request_context
 from plnflr.render.svg import plan_to_svg
 from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
@@ -43,86 +43,6 @@ def _error_fragment(request: Request, message: str, status: int = 400) -> HTMLRe
         {**_ctx("/"), "request": request, "error": message}
     )
     return HTMLResponse(html, status_code=status)
-
-
-def _layout_form(**fields: str) -> LayoutForm:
-    defaults = default_form()
-    defaults.update({key: value for key, value in fields.items() if value is not None})
-    return LayoutForm(
-        shape=defaults["shape"],  # type: ignore[arg-type]
-        kind=defaults["kind"],  # type: ignore[arg-type]
-        width_m=defaults["width_m"],
-        height_m=defaults["height_m"],
-        l_span_x_m=defaults["l_span_x_m"],
-        l_span_y_m=defaults["l_span_y_m"],
-        l_cutout_x_m=defaults["l_cutout_x_m"],
-        l_cutout_y_m=defaults["l_cutout_y_m"],
-        vertices=defaults["vertices"],
-        plank_length_m=defaults["plank_length_m"],
-        plank_width_m=defaults["plank_width_m"],
-        boards_per_pack=defaults["boards_per_pack"],
-        tile_length_m=defaults["tile_length_m"],
-        tile_width_m=defaults["tile_width_m"],
-        grout_mm=defaults["grout_mm"],
-        expansion_mm=defaults["expansion_mm"],
-        direction=defaults["direction"],  # type: ignore[arg-type]
-        stagger=defaults["stagger"],  # type: ignore[arg-type]
-        angle_deg=defaults.get("angle_deg", "0"),
-        split=defaults.get("split", "none"),  # type: ignore[arg-type]
-        split_at_m=defaults.get("split_at_m", ""),
-        kind_b=defaults.get("kind_b", "tile"),  # type: ignore[arg-type]
-    )
-
-
-def _form_payload(
-    *,
-    shape: str,
-    kind: str,
-    width_m: str,
-    height_m: str,
-    l_span_x_m: str,
-    l_span_y_m: str,
-    l_cutout_x_m: str,
-    l_cutout_y_m: str,
-    vertices: str,
-    plank_length_m: str,
-    plank_width_m: str,
-    boards_per_pack: str,
-    tile_length_m: str,
-    tile_width_m: str,
-    grout_mm: str,
-    expansion_mm: str,
-    direction: str,
-    stagger: str,
-    angle_deg: str = "0",
-    split: str = "none",
-    split_at_m: str = "",
-    kind_b: str = "tile",
-) -> dict[str, str]:
-    return {
-        "shape": shape,
-        "kind": kind,
-        "width_m": width_m,
-        "height_m": height_m,
-        "l_span_x_m": l_span_x_m,
-        "l_span_y_m": l_span_y_m,
-        "l_cutout_x_m": l_cutout_x_m,
-        "l_cutout_y_m": l_cutout_y_m,
-        "vertices": vertices,
-        "plank_length_m": plank_length_m,
-        "plank_width_m": plank_width_m,
-        "boards_per_pack": boards_per_pack,
-        "tile_length_m": tile_length_m,
-        "tile_width_m": tile_width_m,
-        "grout_mm": grout_mm,
-        "expansion_mm": expansion_mm,
-        "direction": direction,
-        "stagger": stagger,
-        "angle_deg": angle_deg,
-        "split": split,
-        "split_at_m": split_at_m,
-        "kind_b": kind_b,
-    }
 
 
 @app.get("/healthz")
@@ -180,65 +100,16 @@ def show_room(request: Request, room_id: str):
 
 
 @app.post("/rooms/{room_id}/plan")
-def plan_room(
-    request: Request,
-    room_id: str,
-    shape: str = Form("rect"),
-    kind: str = Form("plank"),
-    width_m: str = Form("4.000"),
-    height_m: str = Form("3.000"),
-    l_span_x_m: str = Form("6.000"),
-    l_span_y_m: str = Form("4.000"),
-    l_cutout_x_m: str = Form("2.500"),
-    l_cutout_y_m: str = Form("2.000"),
-    vertices: str = Form(""),
-    plank_length_m: str = Form("1.383"),
-    plank_width_m: str = Form("0.156"),
-    boards_per_pack: str = Form("8"),
-    tile_length_m: str = Form("0.600"),
-    tile_width_m: str = Form("0.600"),
-    grout_mm: str = Form("3"),
-    expansion_mm: str = Form(""),
-    direction: str = Form("along_long"),
-    stagger: str = Form("third"),
-    angle_deg: str = Form("0"),
-    split: str = Form("none"),
-    split_at_m: str = Form(""),
-    kind_b: str = Form("tile"),
-):
+async def plan_room(request: Request, room_id: str):
     saved = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
     if saved is None:
         return _error_fragment(request, "Nie ma takiego pokoju.", status=404)
-    payload = _form_payload(
-        shape=shape,
-        kind=kind,
-        width_m=width_m,
-        height_m=height_m,
-        l_span_x_m=l_span_x_m,
-        l_span_y_m=l_span_y_m,
-        l_cutout_x_m=l_cutout_x_m,
-        l_cutout_y_m=l_cutout_y_m,
-        vertices=vertices,
-        plank_length_m=plank_length_m,
-        plank_width_m=plank_width_m,
-        boards_per_pack=boards_per_pack,
-        tile_length_m=tile_length_m,
-        tile_width_m=tile_width_m,
-        grout_mm=grout_mm,
-        expansion_mm=expansion_mm,
-        direction=direction,
-        stagger=stagger,
-        angle_deg=angle_deg,
-        split=split,
-        split_at_m=split_at_m,
-        kind_b=kind_b,
-    )
     try:
-        form = _layout_form(**payload)
+        form = await layout_form_from_request(request)
         laid = layout_from_form(form)
     except (ValueError, ValidationError, InvalidOperation) as exc:
         return _error_fragment(request, str(exc) or "Niepoprawne wymiary.")
-    ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=payload)
+    ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=form.model_dump())
     svg = plan_to_svg(laid)
     html = templates.get_template("partials/plan.html").render(
         {
@@ -254,58 +125,9 @@ def plan_room(
 
 
 @app.post("/plan")
-def plan_legacy(
-    request: Request,
-    shape: str = Form("rect"),
-    kind: str = Form("plank"),
-    width_m: str = Form("4.000"),
-    height_m: str = Form("3.000"),
-    l_span_x_m: str = Form("6.000"),
-    l_span_y_m: str = Form("4.000"),
-    l_cutout_x_m: str = Form("2.500"),
-    l_cutout_y_m: str = Form("2.000"),
-    vertices: str = Form(""),
-    plank_length_m: str = Form("1.383"),
-    plank_width_m: str = Form("0.156"),
-    boards_per_pack: str = Form("8"),
-    tile_length_m: str = Form("0.600"),
-    tile_width_m: str = Form("0.600"),
-    grout_mm: str = Form("3"),
-    expansion_mm: str = Form(""),
-    direction: str = Form("along_long"),
-    stagger: str = Form("third"),
-    angle_deg: str = Form("0"),
-    split: str = Form("none"),
-    split_at_m: str = Form(""),
-    kind_b: str = Form("tile"),
-):
+async def plan_legacy(request: Request):
     room = ROOM_STORE.ensure_default(OPEN_USER_ID)
-    return plan_room(
-        request,
-        room.id,
-        shape=shape,
-        kind=kind,
-        width_m=width_m,
-        height_m=height_m,
-        l_span_x_m=l_span_x_m,
-        l_span_y_m=l_span_y_m,
-        l_cutout_x_m=l_cutout_x_m,
-        l_cutout_y_m=l_cutout_y_m,
-        vertices=vertices,
-        plank_length_m=plank_length_m,
-        plank_width_m=plank_width_m,
-        boards_per_pack=boards_per_pack,
-        tile_length_m=tile_length_m,
-        tile_width_m=tile_width_m,
-        grout_mm=grout_mm,
-        expansion_mm=expansion_mm,
-        direction=direction,
-        stagger=stagger,
-        angle_deg=angle_deg,
-        split=split,
-        split_at_m=split_at_m,
-        kind_b=kind_b,
-    )
+    return await plan_room(request, room.id)
 
 
 def main() -> None:
