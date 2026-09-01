@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from fastapi import Request
 from pydantic import BaseModel
 
 from plnflr.domain.constructors import l_shape, rectangle
@@ -44,6 +45,12 @@ class LayoutForm(BaseModel):
     angle_deg: str = "0"
     split: Literal["none", "x", "y"] = "none"
     split_at_m: str = ""
+
+
+async def layout_form_from_request(request: Request) -> LayoutForm:
+    """Collect the layout POST once, using ``LayoutForm`` as the field schema."""
+    posted = await request.form()
+    return LayoutForm.model_validate({key: value for key, value in posted.items()})
 
 
 def _positive_int(raw: str, *, field: str) -> int | None:
