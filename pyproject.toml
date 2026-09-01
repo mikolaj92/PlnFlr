@@ -52,6 +52,9 @@ allow-direct-references = true
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+[tool.lokay]
+test = "uv run pytest -q"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
