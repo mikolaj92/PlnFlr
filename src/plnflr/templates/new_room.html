@@ -3,14 +3,14 @@
 {% block content %}
 <section class="app-stack">
   <div class="card">
-    <div class="card-header">
-      <h1 class="card-title">Nowy pokój</h1>
-      <p class="card-description">
+    <header>
+      <h1 class="text-base font-semibold">Nowy pokój</h1>
+      <p class="text-sm text-muted-foreground">
         Każdy pokój trzyma własny obrys i materiał. Na razie jeden otwarty użytkownik;
         później konta dostaną osobne listy.
       </p>
-    </div>
-    <div class="card-content">
+    </header>
+    <section>
       <form class="app-stack" method="post" action="/rooms">
         <label class="app-stack app-stack--tight" for="name">
           <span class="text-sm font-medium">Nazwa</span>
@@ -18,7 +18,7 @@
         </label>
         <button class="btn" type="submit" data-variant="primary">Dodaj pokój</button>
       </form>
-    </div>
+    </section>
   </div>
 </section>
 {% endblock %}

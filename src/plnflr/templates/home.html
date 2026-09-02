@@ -3,14 +3,14 @@
 {% block content %}
 <section class="app-stack" x-data="{ shape: '{{ form.shape }}', kind: '{{ form.kind }}', split: '{{ form.split }}' }">
   <div class="card">
-    <div class="card-header">
-      <h1 class="card-title">{{ room.name }}</h1>
-      <p class="card-description">
+    <header>
+      <h1 class="text-base font-semibold">{{ room.name }}</h1>
+      <p class="text-sm text-muted-foreground">
         Ty podajesz obrys, kąt i ewentualną podziałkę. Komputer liczy dylatację,
         siatkę, docinki, ilość i kolejność. Podziałka: np. pół kafelki, pół panele.
       </p>
-    </div>
-    <div class="card-content">
+    </header>
+    <section>
       <form
         class="app-stack"
         method="post"
@@ -165,7 +165,7 @@
 
         <button class="btn" type="submit" data-variant="primary">Rozłóż podłogę</button>
       </form>
-    </div>
+    </section>
   </div>
 
   <p id="plan-indicator" class="htmx-indicator text-sm text-muted-foreground">Liczenie siatki…</p>
