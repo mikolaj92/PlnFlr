@@ -2,6 +2,7 @@ from inspect import signature
 
 from fastapi.testclient import TestClient
 
+from plnflr.forms import LayoutForm, room_from_form
 from plnflr.main import app, plan_legacy, plan_room
 
 
@@ -36,7 +37,28 @@ def test_home_has_layout_form() -> None:
     assert 'hx-post="/rooms/' in response.text
     assert 'name="angle_deg"' in response.text
     assert "Podziałka" in response.text
+    assert 'name="hole_rectangles"' in response.text
+    assert 'name="hole_vertices"' in response.text
     assert "Silnik rozkładu jest w kolejce" not in response.text
+
+
+def test_room_from_form_adds_rectangular_hole() -> None:
+    room = room_from_form(
+        LayoutForm(
+            shape="rect",
+            width_m="4",
+            height_m="3",
+            hole_rectangles="1,1,1,1",
+        )
+    )
+
+    assert len(room.holes) == 1
+    assert [(vertex.x_mm, vertex.y_mm) for vertex in room.holes[0].vertices] == [
+        (1000, 1000),
+        (2000, 1000),
+        (2000, 2000),
+        (1000, 2000),
+    ]
 
 
 def test_plan_rectangle_returns_svg_and_row() -> None:
@@ -59,6 +81,28 @@ def test_plan_rectangle_returns_svg_and_row() -> None:
     assert "<svg" in response.text
     assert "Rząd 1" in response.text
     assert "Paczek" in response.text
+
+
+def test_plan_with_hole_excludes_hole_from_svg_and_bom() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/plan",
+            data={
+                "shape": "rect",
+                "kind": "tile",
+                "width_m": "4",
+                "height_m": "3",
+                "hole_rectangles": "1,1,1,1",
+                "tile_length_m": "1",
+                "tile_width_m": "1",
+                "grout_mm": "1",
+                "expansion_mm": "1",
+            },
+        )
+    assert response.status_code == 200
+    assert "<svg" in response.text
+    assert "10.982 m²" in response.text
+    assert "M 1000 1000 L 2000 1000 L 2000 2000 L 1000 2000 Z" in response.text
 
 
 def test_plan_split_returns_two_zones() -> None:
