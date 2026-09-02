@@ -1,27 +1,27 @@
 <section class="app-stack" id="plan-result">
   {% if error %}
   <div class="card" data-variant="destructive">
-    <div class="card-header">
-      <h2 class="card-title">Nie da się rozłożyć</h2>
-      <p class="card-description">{{ error }}</p>
-    </div>
+    <header>
+      <h2 class="text-base font-semibold">Nie da się rozłożyć</h2>
+      <p class="text-sm text-muted-foreground">{{ error }}</p>
+    </header>
   </div>
   {% else %}
   <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Podgląd instalacji</h2>
-      <p class="card-description">{{ plan.rationale_pl }}</p>
-    </div>
-    <div class="card-content pln-stage">
+    <header>
+      <h2 class="text-base font-semibold">Podgląd instalacji</h2>
+      <p class="text-sm text-muted-foreground">{{ plan.rationale_pl }}</p>
+    </header>
+    <section class="pln-stage">
       {{ svg | safe }}
-    </div>
+    </section>
   </div>
 
   <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Ilość</h2>
-    </div>
-    <div class="card-content">
+    <header>
+      <h2 class="text-base font-semibold">Ilość</h2>
+    </header>
+    <section>
       <div class="table-container app-table-wrap">
         <table class="table">
           <tbody>
@@ -36,13 +36,13 @@
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   </div>
 
   {% if plan.boms and plan.boms|length > 1 %}
   <div class="card">
-    <div class="card-header"><h2 class="card-title">Strefy</h2></div>
-    <div class="card-content">
+    <header><h2 class="text-base font-semibold">Strefy</h2></header>
+    <section>
       <div class="table-container app-table-wrap">
         <table class="table">
           <thead>
@@ -61,32 +61,32 @@
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   </div>
   {% endif %}
 
   {% if plan.warnings %}
   <div class="card">
-    <div class="card-header"><h2 class="card-title">Uwagi majstra</h2></div>
-    <div class="card-content">
+    <header><h2 class="text-base font-semibold">Uwagi majstra</h2></header>
+    <section>
       <ul class="app-stack app-stack--tight">
         {% for warning in plan.warnings %}
         <li>{{ warning.message_pl }}</li>
         {% endfor %}
       </ul>
-    </div>
+    </section>
   </div>
   {% endif %}
 
   <div class="card">
-    <div class="card-header"><h2 class="card-title">Kolejność ułożenia</h2></div>
-    <div class="card-content">
+    <header><h2 class="text-base font-semibold">Kolejność ułożenia</h2></header>
+    <section>
       <ol class="app-stack app-stack--tight">
         {% for line in plan.rows_instruction_pl %}
         <li>{{ line }}</li>
         {% endfor %}
       </ol>
-    </div>
+    </section>
   </div>
   {% endif %}
 </section>

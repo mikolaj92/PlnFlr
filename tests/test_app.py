@@ -1,4 +1,5 @@
 from inspect import signature
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -40,6 +41,22 @@ def test_home_has_layout_form() -> None:
     assert 'name="hole_rectangles"' in response.text
     assert 'name="hole_vertices"' in response.text
     assert "Silnik rozkładu jest w kolejce" not in response.text
+
+
+def test_product_templates_use_current_basecoat_card_contract() -> None:
+    forbidden = (
+        "card-header",
+        "card-content",
+        "btn-primary",
+        "btn-secondary",
+        "btn-destructive",
+        "btn-ghost",
+    )
+    templates = Path(__file__).resolve().parents[1] / "src" / "plnflr" / "templates"
+    rendered_sources = "\n".join(path.read_text() for path in templates.rglob("*.html"))
+    assert all(marker not in rendered_sources for marker in forbidden)
+    assert "<header>" in rendered_sources
+    assert "<section>" in rendered_sources
 
 
 def test_room_from_form_adds_rectangular_hole() -> None:
