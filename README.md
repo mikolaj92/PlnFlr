@@ -2,7 +2,7 @@
 
 Plan ułożenia podłogi. Z obrysu pomieszczenia (prostokąt, L, dowolny wielokąt z otworami) i wymiaru deski albo kafelka liczy dylatację, siatkę, docinki, BOM i pokazuje całą instalację.
 
-Stack: FastAPI + Jinja + HTMX + Alpine + Basecoat via [`app-factory`](https://github.com/mikolaj92/app-factory) `v0.5.19`.
+Stack: FastAPI + Jinja + HTMX + Alpine + Basecoat via [`app-factory`](https://github.com/mikolaj92/app-factory) `v0.6.22`.
 
 ## Run
 

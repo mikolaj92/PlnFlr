@@ -1,6 +1,6 @@
 # PlnFlr agent notes
 
-- Host FastAPI on `app-factory` product_shell. Do not copy Basecoat/HTMX/Alpine. Pin `app-factory` git tag `v0.5.19`.
+- Host FastAPI on `app-factory` product_shell. Do not copy Basecoat/HTMX/Alpine. Pin `app-factory` git tag `v0.6.22`.
 - Geometry is integer millimetres. Parse metres with `Decimal`. Kernel: `pyclipper`.
 - Room is a polygon with holes. Rectangle and L are constructors, not separate engines.
 - Grid is axis-aligned rectangles. Clip each board/tile to the inset polygon. Visual preview of the whole install is Definition of Done.
