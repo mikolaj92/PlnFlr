@@ -8,6 +8,8 @@ license = { text = "MIT" }
 authors = [{ name = "PlnFlr contributors" }]
 dependencies = [
   "app-factory[platform]",
+  "my-auth[fastapi-htmx]",
+  "my-usermanager[fastapi-htmx,myauth]",
   "fastapi>=0.115.0",
   "jinja2>=3.1.0",
   "pydantic>=2.10.0",
@@ -24,12 +26,12 @@ dev = [
 ]
 
 [tool.uv.sources]
-app-factory = { git = "https://github.com/mikolaj92/app-factory", tag = "v0.6.22" }
+app-factory = { git = "https://github.com/mikolaj92/app-factory", tag = "v0.6.12" }
+my-auth = { git = "https://github.com/mikolaj92/my-auth", tag = "v0.4.6" }
+my-usermanager = { git = "https://github.com/mikolaj92/my-usermanager", tag = "v0.5.8" }
 
 [tool.uv]
-override-dependencies = [
-  "app-factory @ git+https://github.com/mikolaj92/app-factory.git@v0.6.22",
-]
+override-dependencies = ["app-factory[platform]"]
 
 [project.scripts]
 plnflr = "plnflr.main:main"
