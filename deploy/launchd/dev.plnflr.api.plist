@@ -9,11 +9,11 @@
     <array>
         <string>/bin/zsh</string>
         <string>-lc</string>
-        <string>exec /Users/mini-m4-main/Developer/OSS/PlnFlr/scripts/run_api_launchd.sh</string>
+        <string>exec /Users/mini-m4-0/Developer/OSS/PlnFlr/scripts/run_api_launchd.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/mini-m4-main/Developer/OSS/PlnFlr</string>
+    <string>/Users/mini-m4-0/Developer/OSS/PlnFlr</string>
 
     <key>RunAtLoad</key>
     <true/>
@@ -25,17 +25,17 @@
     <integer>5</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/mini-m4-main/Developer/OSS/PlnFlr/logs/plnflr-api.log</string>
+    <string>/Users/mini-m4-0/Developer/OSS/PlnFlr/logs/plnflr-api.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/mini-m4-main/Developer/OSS/PlnFlr/logs/plnflr-api-error.log</string>
+    <string>/Users/mini-m4-0/Developer/OSS/PlnFlr/logs/plnflr-api-error.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/Users/mini-m4-main/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/Users/mini-m4-0/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>HOME</key>
-        <string>/Users/mini-m4-main</string>
+        <string>/Users/mini-m4-0</string>
         <key>PORT</key>
         <string>8004</string>
     </dict>
