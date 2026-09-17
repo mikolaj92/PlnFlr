@@ -18,7 +18,7 @@ from plnflr.domain.models import (
     Vertex,
     Zone,
 )
-from plnflr.domain.units import metres_to_mm
+from plnflr.domain.units import metres_to_mm, metres_to_mm_coord
 from plnflr.engine.layout import layout_floor
 
 
@@ -68,6 +68,19 @@ def _positive_int(raw: str, *, field: str) -> int | None:
     return value
 
 
+def _non_negative_int(raw: str, *, field: str) -> int | None:
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise ValueError(f"{field} musi być liczbą całkowitą") from exc
+    if value < 0:
+        raise ValueError(f"{field} nie może być ujemne")
+    return value
+
+
 def _angle_deg(raw: str) -> int:
     text = raw.strip() or "0"
     try:
@@ -87,7 +100,7 @@ def parse_vertices(raw: str) -> Ring:
         parts = [p.strip() for p in line.split(",") if p.strip()]
         if len(parts) != 2:
             raise ValueError("każdy wierzchołek to x,y w metrach")
-        points.append(Vertex(metres_to_mm(parts[0]), metres_to_mm(parts[1])))
+        points.append(Vertex(metres_to_mm_coord(parts[0]), metres_to_mm_coord(parts[1])))
     return Ring(tuple(points))
 
 
@@ -100,7 +113,10 @@ def _rectangular_holes(raw: str) -> list[Ring]:
         parts = [part.strip() for part in line.replace(";", ",").split(",")]
         if len(parts) != 4 or any(not part for part in parts):
             raise ValueError("każdy prostokątny otwór to x,y,szerokość,wysokość w metrach")
-        x, y, width, height = (metres_to_mm(part) for part in parts)
+        x = metres_to_mm_coord(parts[0])
+        y = metres_to_mm_coord(parts[1])
+        width = metres_to_mm(parts[2])
+        height = metres_to_mm(parts[3])
         holes.append(
             Ring(
                 (
@@ -143,11 +159,7 @@ def room_from_form(form: LayoutForm) -> Room:
 
 
 def rules_from_form(form: LayoutForm) -> LayoutRules:
-    expansion = None
-    if form.expansion_mm.strip():
-        expansion = _positive_int(form.expansion_mm, field="dylatacja")
-        if expansion is None:
-            expansion = 0
+    expansion = _non_negative_int(form.expansion_mm, field="dylatacja")
     return LayoutRules(
         expansion_mm=expansion,
         stagger=form.stagger,

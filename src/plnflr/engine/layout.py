@@ -15,6 +15,7 @@ from plnflr.domain.models import (
     Zone,
 )
 from plnflr.engine.bom import waste_pct
+from plnflr.engine.clip import ring_to_tuple, validate_room
 from plnflr.engine.expansion import bbox
 from plnflr.engine.plank import layout_planks
 from plnflr.engine.split import split_room
@@ -31,6 +32,10 @@ def layout_floor(
 ) -> LayoutPlan:
     if not zones:
         raise ValueError("potrzeba przynajmniej jednej strefy")
+    validate_room(
+        ring_to_tuple(room.outer),
+        tuple(ring_to_tuple(hole) for hole in room.holes),
+    )
     if split_axis is None or len(zones) == 1:
         return _stamp(_layout_zone(room, zones[0], rules), 0)
 

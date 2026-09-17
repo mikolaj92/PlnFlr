@@ -1,6 +1,6 @@
 import pytest
 
-from plnflr.domain.units import metres_to_mm, mm_to_metres_str
+from plnflr.domain.units import metres_to_mm, metres_to_mm_coord, mm_to_metres_str
 
 
 def test_metres_to_mm_converts_whole_metres() -> None:
@@ -15,6 +15,17 @@ def test_metres_to_mm_rounds_half_up_to_nearest_millimetre() -> None:
 def test_metres_to_mm_rejects_zero_and_negatives(value: str) -> None:
     with pytest.raises(ValueError):
         metres_to_mm(value)
+
+
+def test_metres_to_mm_coord_allows_origin() -> None:
+    assert metres_to_mm_coord("0") == 0
+    assert metres_to_mm_coord("4") == 4000
+
+
+@pytest.mark.parametrize("value", ["-1", "-0.001"])
+def test_metres_to_mm_coord_rejects_negatives(value: str) -> None:
+    with pytest.raises(ValueError):
+        metres_to_mm_coord(value)
 
 
 def test_mm_to_metres_str_formats_three_decimal_places() -> None:

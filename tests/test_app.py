@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from plnflr.forms import LayoutForm, room_from_form
+from plnflr.forms import LayoutForm, parse_vertices, room_from_form, rules_from_form
 from plnflr.main import app, plan_legacy, plan_room
 
 
@@ -169,6 +169,33 @@ def test_plan_l_shape_returns_svg() -> None:
     assert "Rząd 1" in response.text
 
 
+def test_parse_vertices_allows_origin() -> None:
+    ring = parse_vertices("0,0\n4,0\n4,3\n0,3")
+    assert [(v.x_mm, v.y_mm) for v in ring.vertices] == [
+        (0, 0),
+        (4000, 0),
+        (4000, 3000),
+        (0, 3000),
+    ]
+
+
+def test_plan_polygon_from_origin_returns_svg() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/plan",
+            data={
+                "shape": "polygon",
+                "kind": "plank",
+                "vertices": "0,0\n4,0\n4,3\n0,3",
+                "plank_length_m": "1.383",
+                "plank_width_m": "0.156",
+            },
+        )
+    assert response.status_code == 200
+    assert "<svg" in response.text
+    assert "metres must be positive" not in response.text
+
+
 def test_plan_bowtie_returns_400() -> None:
     with TestClient(app) as client:
         response = client.post(
@@ -176,10 +203,36 @@ def test_plan_bowtie_returns_400() -> None:
             data={
                 "shape": "polygon",
                 "kind": "plank",
-                "vertices": "0,0\n1,1\n1,0\n0,1",
+                "vertices": "1,1\n2,2\n2,1\n1,2",
                 "plank_length_m": "1.383",
                 "plank_width_m": "0.156",
             },
         )
     assert response.status_code == 400
-    assert "Nie da się rozłożyć" in response.text
+    assert "self-intersecting" in response.text.lower() or "wielokąt" in response.text.lower()
+    assert "metres must be positive" not in response.text
+    assert "<svg" not in response.text
+
+
+def test_plan_explicit_zero_expansion_is_no_gap() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/plan",
+            data={
+                "shape": "rect",
+                "kind": "plank",
+                "width_m": "4.000",
+                "height_m": "3.000",
+                "plank_length_m": "1.383",
+                "plank_width_m": "0.156",
+                "expansion_mm": "0",
+            },
+        )
+    assert response.status_code == 200
+    assert "<svg" in response.text
+    assert ">0 mm<" in response.text
+
+
+def test_rules_from_form_accepts_zero_expansion() -> None:
+    rules = rules_from_form(LayoutForm(expansion_mm="0"))
+    assert rules.expansion_mm == 0
