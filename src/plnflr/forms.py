@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Literal
 
 from fastapi import Request
@@ -14,6 +15,7 @@ from plnflr.domain.models import (
     PlankSpec,
     Ring,
     Room,
+    Threshold,
     TileSpec,
     Vertex,
     Zone,
@@ -35,6 +37,8 @@ class LayoutForm(BaseModel):
     vertices: str = ""
     hole_rectangles: str = ""
     hole_vertices: str = ""
+    door_rectangles: str = ""
+    door_vertices: str = ""
     plank_length_m: str = "1.383"
     plank_width_m: str = "0.156"
     boards_per_pack: str = "8"
@@ -192,20 +196,50 @@ def _zone(form: LayoutForm, kind: Literal["plank", "tile"], label: str) -> Zone:
     return Zone(kind="plank", plank=plank_from_form(form), label=label)
 
 
+def _threshold_from_ring(ring: Ring) -> Threshold:
+    verts = ring.vertices
+    edges = [
+        int(
+            round(
+                ((nxt.x_mm - vertex.x_mm) ** 2 + (nxt.y_mm - vertex.y_mm) ** 2) ** 0.5
+            )
+        )
+        for vertex, nxt in zip(verts, verts[1:] + verts[:1], strict=True)
+    ]
+    return Threshold(
+        label="listwa progowa",
+        length_mm=max(edges),
+        width_mm=min(edges),
+        geometry=ring,
+    )
+
+
 def layout_from_form(form: LayoutForm) -> LayoutPlan:
     room = room_from_form(form)
+    door_rings = tuple(
+        (*_rectangular_holes(form.door_rectangles), *_polygonal_holes(form.door_vertices))
+    )
+    if door_rings:
+        room = Room(room.outer, holes=(*room.holes, *door_rings))
     rules = rules_from_form(form)
     if form.split == "none":
         label = "Płytki" if form.kind == "tile" else "Panele"
-        return layout_floor(room, (_zone(form, form.kind, label),), rules)
-    split_at = metres_to_mm(form.split_at_m) if form.split_at_m.strip() else None
-    return layout_floor(
-        room,
-        (
-            _zone(form, form.kind, "Strefa A"),
-            _zone(form, form.kind_b, "Strefa B"),
-        ),
-        rules,
-        split_axis=form.split,
-        split_at_mm=split_at,
+        plan = layout_floor(room, (_zone(form, form.kind, label),), rules)
+    else:
+        split_at = metres_to_mm(form.split_at_m) if form.split_at_m.strip() else None
+        plan = layout_floor(
+            room,
+            (
+                _zone(form, form.kind, "Strefa A"),
+                _zone(form, form.kind_b, "Strefa B"),
+            ),
+            rules,
+            split_axis=form.split,
+            split_at_mm=split_at,
+        )
+    if not door_rings:
+        return plan
+    return replace(
+        plan,
+        thresholds=tuple(_threshold_from_ring(ring) for ring in door_rings),
     )

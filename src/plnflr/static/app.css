@@ -50,6 +50,12 @@
   stroke-dasharray: 40 24;
 }
 
+.pln-threshold {
+  fill: color-mix(in oklab, var(--foreground) 55%, transparent);
+  stroke: var(--foreground);
+  stroke-width: 4;
+}
+
 .pln-clip {
   fill-opacity: 0.92;
   stroke-dasharray: 12 8;

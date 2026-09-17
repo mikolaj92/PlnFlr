@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Annotated
 
 import uvicorn
 from app_factory.fastapi import install_app_factory_ui
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from plnflr.forms import layout_form_from_request, layout_from_form
+from plnflr.importing.roomplan import room_from_usdz
 from plnflr.platform_chrome import install_platform_chrome, platform_request_context
 from plnflr.render.svg import plan_to_svg
 from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
@@ -97,6 +99,36 @@ def show_room(request: Request, room_id: str):
             **_ctx(f"/rooms/{room.id}", rooms),
         },
     )
+
+
+@app.post("/rooms/{room_id}/scan")
+async def import_scan(
+    request: Request,
+    room_id: str,
+    scan: Annotated[UploadFile, File()],
+):
+    saved = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
+    if saved is None:
+        return RedirectResponse("/", status_code=303)
+    payload = await scan.read()
+    try:
+        captured = room_from_usdz(payload)
+    except (ValueError, KeyError, OSError) as exc:
+        return _error_fragment(request, str(exc) or "Nie da się wczytać skanu.")
+    form = default_form()
+    form.update(saved.form)
+    form.update(
+        {
+            "shape": "polygon",
+            "vertices": captured.vertices_m,
+            "hole_rectangles": captured.hole_rectangles,
+            "hole_vertices": "",
+            "door_rectangles": "",
+            "door_vertices": captured.door_vertices,
+        }
+    )
+    ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=form)
+    return RedirectResponse(f"/rooms/{saved.id}", status_code=303)
 
 
 @app.post("/rooms/{room_id}/plan")

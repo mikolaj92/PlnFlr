@@ -86,6 +86,14 @@ class Warning:
 
 
 @dataclass(frozen=True, slots=True)
+class Threshold:
+    label: str
+    length_mm: int
+    width_mm: int
+    geometry: Ring
+
+
+@dataclass(frozen=True, slots=True)
 class BillOfMaterials:
     pieces: int
     full_boards: int
@@ -113,3 +121,4 @@ class LayoutPlan:
     split_at_mm: int | None = None
     boms: tuple[BillOfMaterials, ...] = ()
     divider: tuple[Vertex, Vertex] | None = None
+    thresholds: tuple[Threshold, ...] = ()

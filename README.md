@@ -14,7 +14,7 @@ uv run plnflr
 uv run pytest
 ```
 
-v0.1: lista pokoi jednego otwartego użytkownika. User podaje obrys, kąt i ewentualną podziałkę (np. pół kafelki, pół panele); serwer liczy dylatację, siatkę, docinki, BOM i kolejność. Bez 3D i kont.
+v0.1: lista pokoi jednego otwartego użytkownika. User podaje obrys, kąt i ewentualną podziałkę (np. pół kafelki, pół panele) albo wgrywa skan RoomPlan (USDZ). Serwer liczy dylatację, siatkę, docinki, odcięcia na progach (listwa), BOM i kolejność. Bez kont.
 
 ## Live
 

@@ -33,6 +33,7 @@
             <tr><th>Dylatacja</th><td>{{ plan.gap_mm }} mm</td></tr>
             {% if plan.angle_deg %}<tr><th>Kąt</th><td>{{ plan.angle_deg }}°</td></tr>{% endif %}
             {% if plan.split_at_mm is not none %}<tr><th>Podziałka</th><td>{{ plan.split_at_mm }} mm</td></tr>{% endif %}
+            {% if plan.thresholds %}<tr><th>Listwy progowe</th><td>{{ plan.thresholds|length }}</td></tr>{% endif %}
           </tbody>
         </table>
       </div>
@@ -61,6 +62,33 @@
           </tbody>
         </table>
       </div>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if plan.thresholds %}
+  <div class="card">
+    <header><h2 class="text-base font-semibold">Przejścia / listwy progowe</h2></header>
+    <section>
+      <div class="table-container app-table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Element</th><th>Długość</th><th>Szerokość</th></tr>
+          </thead>
+          <tbody>
+            {% for strip in plan.thresholds %}
+            <tr>
+              <td>{{ strip.label }}</td>
+              <td>{{ strip.length_mm }} mm</td>
+              <td>{{ strip.width_mm }} mm</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-sm text-muted-foreground">
+        Deska urywa się na progu. Szczelinę dylatacyjną zasłania listwa.
+      </p>
     </section>
   </div>
   {% endif %}
