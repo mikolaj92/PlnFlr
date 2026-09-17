@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "app_factory/components/file_upload.html" import file_upload %}
 
 {% block content %}
 <section class="app-stack" x-data="{ shape: '{{ form.shape }}', kind: '{{ form.kind }}', split: '{{ form.split }}' }">
@@ -11,19 +12,25 @@
       </p>
     </header>
     <section>
-      <form class="app-stack" method="post" action="/rooms/{{ room.id }}/scan" enctype="multipart/form-data">
-        <fieldset class="app-stack app-stack--tight">
-          <legend class="text-sm font-medium">Skan RoomPlan</legend>
-          <p class="text-sm text-muted-foreground">
-            USDZ ze ścianami, podłogą i drzwiami. Drzwi stają się odcięciem na progu (listwa).
-          </p>
-          <label class="app-stack app-stack--tight" for="scan">
-            <span class="text-sm font-medium">Plik USDZ</span>
-            <input id="scan" class="input" type="file" name="scan" accept=".usdz,model/vnd.usdz+zip" required>
-          </label>
-        </fieldset>
-        <button class="btn" type="submit">Wczytaj skan</button>
-      </form>
+      <fieldset class="app-stack app-stack--tight">
+        <legend class="text-sm font-medium">Skan RoomPlan</legend>
+        {{ file_upload(
+          id="room-scan",
+          action="/rooms/" ~ room.id ~ "/scan",
+          name="scan",
+          accept=".usdz,model/vnd.usdz+zip",
+          max_bytes=scan_max_bytes,
+          choose_label="Wybierz skan USDZ",
+          drop_label="Upuść plik RoomPlan albo wybierz z iPhone'a",
+          help_text="Drzwi stają się odcięciem na progu (listwa).",
+          submit_label="Wczytaj skan",
+          remove_label="Usuń",
+          too_large_label="Plik jest za duży: {file}.",
+          wrong_type_label="To nie jest USDZ: {file}.",
+          empty_label="Wybierz skan RoomPlan.",
+          target="#plan-panel"
+        ) }}
+      </fieldset>
 
       <form
         class="app-stack"

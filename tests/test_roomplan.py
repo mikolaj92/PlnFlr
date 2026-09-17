@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -193,6 +194,19 @@ def test_roomplan_rejects_empty_zip() -> None:
         room_from_usdz(buf.getvalue())
 
 
+def test_room_page_uses_factory_file_upload(isolated_room_store) -> None:
+    room = isolated_room_store.ensure_default("local")
+    with TestClient(app) as client:
+        response = client.get(f"/rooms/{room.id}")
+    assert response.status_code == 200
+    assert "data-app-file-upload" in response.text
+    assert "app-dropzone" in response.text
+    assert 'name="scan"' in response.text
+    assert "data-max-bytes=" in response.text
+    assert 'hx-encoding="multipart/form-data"' in response.text
+    assert "__appFileUploadBooted" in response.text
+
+
 def test_upload_usdz_fills_polygon_and_doors(isolated_room_store) -> None:
     room = isolated_room_store.ensure_default("local")
     with TestClient(app) as client:
@@ -212,6 +226,62 @@ def test_upload_usdz_fills_polygon_and_doors(isolated_room_store) -> None:
     assert saved.form["door_vertices"]
     assert saved.form["door_rectangles"] == ""
     assert saved.form["hole_rectangles"]
+
+
+def test_htmx_scan_redirects_full_page(isolated_room_store) -> None:
+    room = isolated_room_store.ensure_default("local")
+    with TestClient(app) as client:
+        response = client.post(
+            f"/rooms/{room.id}/scan",
+            files={"scan": ("salon.usdz", make_salon_usdz(), "model/vnd.usdz+zip")},
+            headers={"HX-Request": "true"},
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["HX-Redirect"] == f"/rooms/{room.id}"
+
+
+def test_oversized_scan_is_rejected(isolated_room_store, monkeypatch) -> None:
+    monkeypatch.setattr("plnflr.main.SCAN_MAX_BYTES", 64)
+    room = isolated_room_store.ensure_default("local")
+    with TestClient(app) as client:
+        response = client.post(
+            f"/rooms/{room.id}/scan",
+            files={"scan": ("salon.usdz", make_salon_usdz(), "model/vnd.usdz+zip")},
+        )
+    assert response.status_code == 413
+    saved = isolated_room_store.get(room.id, user_id="local")
+    assert saved is not None
+    assert saved.form["shape"] != "polygon"
+
+
+_SCAN2 = Path("/Users/mini-m4-0/usdz/Scan 2.usdz")
+
+
+@pytest.mark.skipif(not _SCAN2.exists(), reason="investment scan not on this machine")
+def test_upload_scan2_keeps_material_and_cuts_doors(isolated_room_store) -> None:
+    room = isolated_room_store.ensure_default("local")
+    isolated_room_store.update_form(
+        room.id, user_id="local", form={"angle_deg": "15", "kind": "plank"}
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            f"/rooms/{room.id}/scan",
+            files={"scan": ("Scan 2.usdz", _SCAN2.read_bytes(), "model/vnd.usdz+zip")},
+            follow_redirects=True,
+        )
+        saved = isolated_room_store.get(room.id, user_id="local")
+        assert saved is not None
+        assert saved.form["shape"] == "polygon"
+        assert saved.form["angle_deg"] == "15"
+        assert len(saved.form["vertices"].splitlines()) == 15
+        assert saved.form["door_vertices"].count("\n\n") == 2
+        plan = client.post(f"/rooms/{room.id}/plan", data=saved.form)
+    assert response.status_code == 200
+    assert plan.status_code == 200
+    assert "listwa progowa" in plan.text.lower()
+    assert plan.text.lower().count("listwa progowa") == 3
+    assert "pln-threshold" in plan.text
 
 
 def test_plan_from_imported_doors_lists_threshold_strip(isolated_room_store) -> None:

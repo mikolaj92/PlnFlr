@@ -8,6 +8,8 @@ from typing import Annotated
 
 import uvicorn
 from app_factory.fastapi import install_app_factory_ui
+from app_factory.responses import htmx_redirect
+from app_factory.uploads import UploadLimitExceeded, read_upload_bounded
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +25,7 @@ from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
 PACKAGE_DIR = Path(__file__).parent
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 ROOM_STORE = RoomStore(DATA_DIR / "rooms.json")
+SCAN_MAX_BYTES = 8 * 1024 * 1024
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 
 app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None)
@@ -96,6 +99,7 @@ def show_room(request: Request, room_id: str):
             "nav_active": room.id,
             "room": room,
             "form": form,
+            "scan_max_bytes": SCAN_MAX_BYTES,
             **_ctx(f"/rooms/{room.id}", rooms),
         },
     )
@@ -109,12 +113,16 @@ async def import_scan(
 ):
     saved = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
     if saved is None:
-        return RedirectResponse("/", status_code=303)
-    payload = await scan.read()
+        return htmx_redirect(request, "/")
     try:
-        captured = room_from_usdz(payload)
+        uploaded = await read_upload_bounded(scan, max_bytes=SCAN_MAX_BYTES)
+        captured = room_from_usdz(uploaded.data)
+    except UploadLimitExceeded:
+        return _error_fragment(request, "Skan jest za duży.", status=413)
     except (ValueError, KeyError, OSError) as exc:
         return _error_fragment(request, str(exc) or "Nie da się wczytać skanu.")
+    finally:
+        await scan.close()
     form = default_form()
     form.update(saved.form)
     form.update(
@@ -128,7 +136,7 @@ async def import_scan(
         }
     )
     ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=form)
-    return RedirectResponse(f"/rooms/{saved.id}", status_code=303)
+    return htmx_redirect(request, f"/rooms/{saved.id}")
 
 
 @app.post("/rooms/{room_id}/plan")
