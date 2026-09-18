@@ -7,4 +7,5 @@ public enum LayoutError: Error, Equatable, Sendable {
     case rectangleSidesMustBePositive
     case ringNeedsThreeVertices
     case selfIntersectingPolygon
+    case spansMustBePositive
 }

@@ -83,6 +83,28 @@ private struct AABB {
         return AABB(minX: x0, minY: y0, maxX: x1, maxY: y1)
     }
 
+    /// Difference vs an axis-aligned hole. Covers a board split by a fireplace.
+    func subtracting(_ hole: AABB) -> [AABB] {
+        guard let hit = intersection(hole) else { return [self] }
+        if hit.minX <= minX, hit.minY <= minY, hit.maxX >= maxX, hit.maxY >= maxY {
+            return []
+        }
+        var parts: [AABB] = []
+        if hit.minX > minX {
+            parts.append(AABB(minX: minX, minY: minY, maxX: hit.minX, maxY: maxY))
+        }
+        if hit.maxX < maxX {
+            parts.append(AABB(minX: hit.maxX, minY: minY, maxX: maxX, maxY: maxY))
+        }
+        if hit.minY > minY {
+            parts.append(AABB(minX: hit.minX, minY: minY, maxX: hit.maxX, maxY: hit.minY))
+        }
+        if hit.maxY < maxY {
+            parts.append(AABB(minX: hit.minX, minY: hit.maxY, maxX: hit.maxX, maxY: maxY))
+        }
+        return parts
+    }
+
     var vertices: [Vertex] {
         [Vertex(minX, minY), Vertex(maxX, minY), Vertex(maxX, maxY), Vertex(minX, maxY)]
     }
@@ -118,10 +140,13 @@ public func intersectRect(_ rect: [Vertex], outer: [Vertex], holes: [[Vertex]]) 
     -> [[Vertex]]
 {
     guard let subject = AABB(rect), let clip = AABB(outer) else { return [] }
-    guard let solution = subject.intersection(clip) else { return [] }
-    // ponytail: AABB ∩ AABB. Difference vs holes needs Clipper.
-    _ = holes
-    return [solution.vertices]
+    guard let clipped = subject.intersection(clip) else { return [] }
+    var parts = [clipped]
+    for hole in holes {
+        guard let cut = AABB(hole) else { continue }
+        parts = parts.flatMap { $0.subtracting(cut) }
+    }
+    return parts.map(\.vertices)
 }
 
 public func insetRoom(_ room: Room, gapMm: Int) throws -> Room {
