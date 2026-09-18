@@ -6,6 +6,17 @@ import Testing
     #expect(orientationCcw(normalizeRing(cw)))
 }
 
+@Test func insetLShape() throws {
+    let room = try lShape(spanXMm: 6000, spanYMm: 4000, cutoutXMm: 2500, cutoutYMm: 2000)
+    let (inner, holes) = try inset(outer: room.outer.vertices, holes: [], gapMm: 10)
+    #expect(holes.isEmpty)
+    #expect(areaMm2(inner) == 18_800_400)
+    let xs = inner.map(\.xMm)
+    let ys = inner.map(\.yMm)
+    #expect(xs.min() == 10 && xs.max() == 5990)
+    #expect(ys.min() == 10 && ys.max() == 3990)
+}
+
 @Test func insetSquare() throws {
     let (inner, holes) = try inset(
         outer: [Vertex(0, 0), Vertex(4000, 0), Vertex(4000, 3000), Vertex(0, 3000)],

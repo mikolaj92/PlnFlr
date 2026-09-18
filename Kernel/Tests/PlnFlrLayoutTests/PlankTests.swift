@@ -20,6 +20,17 @@ private func covered(_ plan: LayoutPlan) -> Int {
     #expect(plan.rowsInstructionPl.joined(separator: "\n").contains("Rząd 1"))
 }
 
+@Test func lShapeHasPieces() throws {
+    let plan = try layoutPlanks(
+        try lShape(spanXMm: 6000, spanYMm: 4000, cutoutXMm: 2500, cutoutYMm: 2000),
+        PlankSpec(lengthMm: 1383, widthMm: 156),
+        LayoutRules(expansionMm: 10)
+    )
+    #expect(!plan.pieces.isEmpty)
+    #expect(abs(covered(plan) - plan.bom.areaNetMm2) <= max(plan.pieces.count, 1))
+    #expect(Set(plan.pieces.map(\.rowIndex)).count > 1)
+}
+
 @Test func intoWindowRunsBoardsPerpendicularToWindowWall() throws {
     let window = Opening(label: "okno", start: Vertex(1000, 0), end: Vertex(2000, 0))
     let plan = try layoutPlanks(
