@@ -1,3 +1,4 @@
+import re
 from inspect import signature
 from pathlib import Path
 
@@ -41,6 +42,29 @@ def test_home_has_layout_form() -> None:
     assert 'name="hole_rectangles"' in response.text
     assert 'name="hole_vertices"' in response.text
     assert "Silnik rozkładu jest w kolejce" not in response.text
+
+
+def _input_tag(html: str, input_id: str) -> str:
+    match = re.search(rf"<input[^>]*\sid=\"{input_id}\"[^>]*>", html)
+    assert match is not None, input_id
+    return match.group(0)
+
+
+def test_home_uses_range_sliders_for_bounded_numbers() -> None:
+    with TestClient(app) as client:
+        response = client.get("/")
+    html = response.text
+    angle = _input_tag(html, "angle_deg")
+    grout = _input_tag(html, "grout_mm")
+    pack = _input_tag(html, "boards_per_pack")
+    expansion = _input_tag(html, "expansion_mm")
+    width = _input_tag(html, "width_m")
+    assert 'type="range"' in angle and 'min="0"' in angle and 'max="90"' in angle
+    assert 'type="range"' in grout and 'min="1"' in grout and 'max="10"' in grout
+    assert 'type="range"' in pack and 'min="4"' in pack and 'max="16"' in pack
+    assert 'type="range"' in expansion and 'min="0"' in expansion and 'max="30"' in expansion
+    assert 'type="range"' not in width
+    assert 'id="expansion_auto"' in html
 
 
 def test_product_templates_use_current_basecoat_card_contract() -> None:

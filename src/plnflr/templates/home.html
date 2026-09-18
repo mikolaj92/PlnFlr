@@ -2,7 +2,16 @@
 {% from "app_factory/components/file_upload.html" import file_upload %}
 
 {% block content %}
-<section class="app-stack" x-data="{ shape: '{{ form.shape }}', kind: '{{ form.kind }}', split: '{{ form.split }}' }">
+<section class="app-stack" x-data="{
+        shape: '{{ form.shape }}',
+        kind: '{{ form.kind }}',
+        split: '{{ form.split }}',
+        angleDeg: {{ form.angle_deg or 0 }},
+        groutMm: {{ form.grout_mm or 3 }},
+        boardsPerPack: {{ form.boards_per_pack or 8 }},
+        expansionMm: {{ form.expansion_mm if form.expansion_mm else 10 }},
+        expansionAuto: {{ 'true' if not form.expansion_mm else 'false' }}
+      }">
   <div class="card">
     <header>
       <h1 class="text-base font-semibold">{{ room.name }}</h1>
@@ -124,8 +133,8 @@
             <input id="plank_width_m" class="input" name="plank_width_m" value="{{ form.plank_width_m }}">
           </label>
           <label class="app-stack app-stack--tight" for="boards_per_pack">
-            <span class="text-sm font-medium">Sztuk w paczce</span>
-            <input id="boards_per_pack" class="input" name="boards_per_pack" value="{{ form.boards_per_pack }}">
+            <span class="text-sm font-medium">Sztuk w paczce: <span x-text="boardsPerPack"></span></span>
+            <input id="boards_per_pack" class="input" type="range" name="boards_per_pack" min="4" max="16" step="1" value="{{ form.boards_per_pack }}" x-model.number="boardsPerPack">
           </label>
         </div>
 
@@ -139,16 +148,20 @@
             <input id="tile_width_m" class="input" name="tile_width_m" value="{{ form.tile_width_m }}">
           </label>
           <label class="app-stack app-stack--tight" for="grout_mm">
-            <span class="text-sm font-medium">Fuga (mm)</span>
-            <input id="grout_mm" class="input" name="grout_mm" value="{{ form.grout_mm }}">
+            <span class="text-sm font-medium">Fuga: <span x-text="groutMm"></span> mm</span>
+            <input id="grout_mm" class="input" type="range" name="grout_mm" min="1" max="10" step="1" value="{{ form.grout_mm }}" x-model.number="groutMm">
           </label>
         </div>
 
         <div class="app-card-grid">
-          <label class="app-stack app-stack--tight" for="expansion_mm">
-            <span class="text-sm font-medium">Dylatacja (mm, puste = auto)</span>
-            <input id="expansion_mm" class="input" name="expansion_mm" placeholder="auto" value="{{ form.expansion_mm }}">
-          </label>
+          <div class="app-stack app-stack--tight">
+            <div class="app-cluster app-cluster--between">
+              <label class="text-sm font-medium" for="expansion_mm">Dylatacja: <span x-show="!expansionAuto"><span x-text="expansionMm"></span> mm</span><span x-show="expansionAuto" x-cloak>auto</span></label>
+              <label class="text-sm" for="expansion_auto"><input id="expansion_auto" type="checkbox" x-model="expansionAuto"> auto</label>
+            </div>
+            <input type="hidden" name="expansion_mm" x-bind:value="expansionAuto ? '' : expansionMm" value="{{ form.expansion_mm }}">
+            <input id="expansion_mm" class="input" type="range" min="0" max="30" step="1" value="{{ form.expansion_mm or 10 }}" x-model.number="expansionMm" x-bind:disabled="expansionAuto">
+          </div>
           <label class="app-stack app-stack--tight" for="direction">
             <span class="text-sm font-medium">Kierunek</span>
             <select id="direction" class="input" name="direction">
@@ -164,8 +177,8 @@
             </select>
           </label>
           <label class="app-stack app-stack--tight" for="angle_deg">
-            <span class="text-sm font-medium">Kąt siatki (°)</span>
-            <input id="angle_deg" class="input" name="angle_deg" value="{{ form.angle_deg }}" inputmode="numeric">
+            <span class="text-sm font-medium">Kąt siatki: <span x-text="angleDeg"></span>°</span>
+            <input id="angle_deg" class="input" type="range" name="angle_deg" min="0" max="90" step="1" value="{{ form.angle_deg }}" x-model.number="angleDeg">
           </label>
         </div>
 
