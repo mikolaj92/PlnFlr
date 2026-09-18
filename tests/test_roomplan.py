@@ -114,6 +114,10 @@ def Xform "Scan" (
                 kind = "group"
                 prepend references = @./assets/Mesh/Walls/Wall0/Door0.usda@
             ) { }
+            def Xform "Wall_1_grp" (
+                kind = "group"
+                prepend references = @./assets/Mesh/Walls/Wall1/Window0.usda@
+            ) { }
         }
     }
 }
@@ -146,6 +150,19 @@ def Xform "Scan" (
                 tx=2.0,
                 ty=1.0,
                 tz=0.04,
+            ),
+        )
+        zf.writestr(
+            "assets/Mesh/Walls/Wall1/Window0.usda",
+            _box_usda(
+                name="Window0",
+                category="Window",
+                hx=0.5,
+                hy=0.6,
+                hz=0.04,
+                tx=2.0,
+                ty=1.0,
+                tz=0.0,
             ),
         )
     return buf.getvalue()
@@ -184,6 +201,20 @@ def test_roomplan_door_is_threshold_strip() -> None:
     ys = [v.y_mm for v in door_hole.vertices]
     assert min(xs) == 1550 and max(xs) == 2450
     assert min(ys) == 0 and max(ys) == 80
+
+
+def test_roomplan_window_is_opening_not_hole() -> None:
+    captured = room_from_usdz(make_salon_usdz())
+
+    assert len(captured.windows) == 1
+    window = captured.windows[0]
+    assert window.label == "okno"
+    xs = [window.start.x_mm, window.end.x_mm]
+    ys = [window.start.y_mm, window.end.y_mm]
+    assert min(xs) == 1500 and max(xs) == 2500
+    assert min(ys) == 0 and max(ys) == 0
+    assert all(hole is not window for hole in captured.room.holes)
+    assert captured.window_segments
 
 
 def test_roomplan_rejects_empty_zip() -> None:

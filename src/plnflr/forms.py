@@ -12,6 +12,7 @@ from plnflr.domain.constructors import l_shape, rectangle
 from plnflr.domain.models import (
     LayoutPlan,
     LayoutRules,
+    Opening,
     PlankSpec,
     Ring,
     Room,
@@ -39,6 +40,7 @@ class LayoutForm(BaseModel):
     hole_vertices: str = ""
     door_rectangles: str = ""
     door_vertices: str = ""
+    window_segments: str = ""
     plank_length_m: str = "1.383"
     plank_width_m: str = "0.156"
     boards_per_pack: str = "8"
@@ -46,7 +48,7 @@ class LayoutForm(BaseModel):
     tile_width_m: str = "0.600"
     grout_mm: str = "3"
     expansion_mm: str = ""
-    direction: Literal["along_long", "along_short"] = "along_long"
+    direction: Literal["along_long", "along_short", "into_window"] = "along_long"
     stagger: Literal["third", "half"] = "third"
     angle_deg: str = "0"
     split: Literal["none", "x", "y"] = "none"
@@ -214,6 +216,25 @@ def _threshold_from_ring(ring: Ring) -> Threshold:
     )
 
 
+def _window_openings(raw: str) -> tuple[Opening, ...]:
+    openings: list[Opening] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [part.strip() for part in line.replace(";", ",").split(",")]
+        if len(parts) != 4 or any(not part for part in parts):
+            raise ValueError("każde okno to x1,y1,x2,y2 w metrach")
+        openings.append(
+            Opening(
+                label="okno",
+                start=Vertex(metres_to_mm_coord(parts[0]), metres_to_mm_coord(parts[1])),
+                end=Vertex(metres_to_mm_coord(parts[2]), metres_to_mm_coord(parts[3])),
+            )
+        )
+    return tuple(openings)
+
+
 def layout_from_form(form: LayoutForm) -> LayoutPlan:
     room = room_from_form(form)
     door_rings = tuple(
@@ -221,10 +242,13 @@ def layout_from_form(form: LayoutForm) -> LayoutPlan:
     )
     if door_rings:
         room = Room(room.outer, holes=(*room.holes, *door_rings))
+    windows = _window_openings(form.window_segments)
     rules = rules_from_form(form)
     if form.split == "none":
         label = "Płytki" if form.kind == "tile" else "Panele"
-        plan = layout_floor(room, (_zone(form, form.kind, label),), rules)
+        plan = layout_floor(
+            room, (_zone(form, form.kind, label),), rules, windows=windows
+        )
     else:
         split_at = metres_to_mm(form.split_at_m) if form.split_at_m.strip() else None
         plan = layout_floor(
@@ -236,6 +260,7 @@ def layout_from_form(form: LayoutForm) -> LayoutPlan:
             rules,
             split_axis=form.split,
             split_at_mm=split_at,
+            windows=windows,
         )
     if not door_rings:
         return plan

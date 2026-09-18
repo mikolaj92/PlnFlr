@@ -9,6 +9,7 @@ from plnflr.domain.models import (
     BillOfMaterials,
     LayoutPlan,
     LayoutRules,
+    Opening,
     Room,
     Vertex,
     Warning,
@@ -29,6 +30,7 @@ def layout_floor(
     *,
     split_axis: Literal["x", "y"] | None = None,
     split_at_mm: int | None = None,
+    windows: tuple[Opening, ...] = (),
 ) -> LayoutPlan:
     if not zones:
         raise ValueError("potrzeba przynajmniej jednej strefy")
@@ -37,7 +39,7 @@ def layout_floor(
         tuple(ring_to_tuple(hole) for hole in room.holes),
     )
     if split_axis is None or len(zones) == 1:
-        return _stamp(_layout_zone(room, zones[0], rules), 0)
+        return _stamp(_layout_zone(room, zones[0], rules, windows=windows), 0)
 
     min_x, min_y, max_x, max_y = bbox(room)
     at = split_at_mm
@@ -46,31 +48,37 @@ def layout_floor(
     first, second = split_room(room, axis=split_axis, at_mm=at)
     plans: list[LayoutPlan] = []
     if first is not None:
-        plans.append(_stamp(_layout_zone(first, zones[0], rules), 0))
+        plans.append(_stamp(_layout_zone(first, zones[0], rules, windows=windows), 0))
     if second is not None and len(zones) > 1:
-        plans.append(_stamp(_layout_zone(second, zones[1], rules), 1))
+        plans.append(_stamp(_layout_zone(second, zones[1], rules, windows=windows), 1))
     if not plans:
         raise ValueError("podziałka nie zostawia pola do ułożenia")
-    return _merge(room, tuple(plans), rules, split_axis, at)
+    return replace(_merge(room, tuple(plans), rules, split_axis, at), windows=windows)
 
 
-def _layout_zone(room: Room, zone: Zone, rules: LayoutRules) -> LayoutPlan:
+def _layout_zone(
+    room: Room,
+    zone: Zone,
+    rules: LayoutRules,
+    *,
+    windows: tuple[Opening, ...] = (),
+) -> LayoutPlan:
     angle = zone.angle_deg if zone.angle_deg is not None else rules.angle_deg
     zone_rules = replace(rules, angle_deg=angle)
     if zone.kind == "tile":
         if zone.tile is None:
             raise ValueError("strefa płytek nie ma wymiaru")
-        plan = layout_tiles(room, zone.tile, zone_rules)
+        plan = layout_tiles(room, zone.tile, zone_rules, windows=windows)
         label = zone.label or "Płytki"
         kind: Literal["plank", "tile"] = "tile"
     else:
         if zone.plank is None:
             raise ValueError("strefa paneli nie ma wymiaru")
-        plan = layout_planks(room, zone.plank, zone_rules)
+        plan = layout_planks(room, zone.plank, zone_rules, windows=windows)
         label = zone.label or "Panele"
         kind = "plank"
     bom = replace(plan.bom, label=label, kind=kind)
-    return replace(plan, bom=bom, boms=(bom,))
+    return replace(plan, bom=bom, boms=(bom,), windows=windows)
 
 
 def _stamp(plan: LayoutPlan, zone_index: int) -> LayoutPlan:

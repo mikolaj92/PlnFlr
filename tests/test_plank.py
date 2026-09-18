@@ -1,7 +1,7 @@
 from collections import Counter
 
 from plnflr.domain.constructors import l_shape, rectangle
-from plnflr.domain.models import LayoutRules, PlankSpec, Ring, Room, Vertex
+from plnflr.domain.models import LayoutRules, Opening, PlankSpec, Ring, Room, Vertex
 from plnflr.engine.clip import area_mm2
 from plnflr.engine.plank import layout_planks
 
@@ -35,6 +35,26 @@ def test_l_shape_has_pieces() -> None:
     assert abs(_covered(plan) - plan.bom.area_net_mm2) <= max(len(plan.pieces), 1)
     rows = {p.row_index for p in plan.pieces}
     assert len(rows) > 1
+
+
+def test_into_window_runs_boards_perpendicular_to_window_wall() -> None:
+    window = Opening(
+        label="okno",
+        start=Vertex(1000, 0),
+        end=Vertex(2000, 0),
+    )
+    plan = layout_planks(
+        rectangle(4000, 3000),
+        PlankSpec(1383, 156),
+        LayoutRules(expansion_mm=10, direction="into_window"),
+        windows=(window,),
+    )
+    assert plan.windows == (window,)
+    full = next(piece for piece in plan.pieces if piece.kind == "full")
+    dx = max(v.x_mm for v in full.geometry) - min(v.x_mm for v in full.geometry)
+    dy = max(v.y_mm for v in full.geometry) - min(v.y_mm for v in full.geometry)
+    assert dy > dx
+    assert "okna" in plan.rationale_pl.lower()
 
 
 def test_triangle_clips() -> None:

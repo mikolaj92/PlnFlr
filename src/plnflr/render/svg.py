@@ -78,6 +78,11 @@ def plan_to_svg(plan: LayoutPlan, *, max_px: int = 900) -> str:
         extras.append(
             f'<path class="pln-threshold" d="{_path(strip.geometry)}" />'
         )
+    for window in plan.windows:
+        extras.append(
+            f'<line class="pln-window" x1="{window.start.x_mm}" y1="{window.start.y_mm}" '
+            f'x2="{window.end.x_mm}" y2="{window.end.y_mm}" />'
+        )
     body = "\n".join(
         [
             f'<path class="pln-room" fill-rule="evenodd" d="{evenodd}" />',

@@ -133,6 +133,7 @@ async def import_scan(
             "hole_vertices": "",
             "door_rectangles": "",
             "door_vertices": captured.door_vertices,
+            "window_segments": captured.window_segments,
         }
     )
     ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=form)

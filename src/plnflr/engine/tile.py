@@ -7,6 +7,7 @@ from dataclasses import replace
 from plnflr.domain.models import (
     LayoutPlan,
     LayoutRules,
+    Opening,
     Piece,
     Room,
     TileSpec,
@@ -75,7 +76,12 @@ def _lay_axis(inner: Room, spec: TileSpec, rules: LayoutRules) -> tuple[Piece, .
     return tuple(pieces)
 
 
-def layout_tiles(room: Room, spec: TileSpec, rules: LayoutRules) -> LayoutPlan:
+def layout_tiles(
+    room: Room,
+    spec: TileSpec,
+    rules: LayoutRules,
+    windows: tuple[Opening, ...] = (),
+) -> LayoutPlan:
     gap = resolve_gap_mm(room, rules)
     inner = inset_room(room, gap)
     angle = int(rules.angle_deg) % 360
@@ -124,4 +130,5 @@ def layout_tiles(room: Room, spec: TileSpec, rules: LayoutRules) -> LayoutPlan:
         ),
         angle_deg=angle,
         boms=(bom,),
+        windows=windows,
     )

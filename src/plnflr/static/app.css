@@ -56,6 +56,17 @@
   stroke-width: 4;
 }
 
+.pln-window {
+  stroke: color-mix(in oklab, #0284c7 70%, var(--foreground));
+  stroke-width: 24;
+  stroke-linecap: square;
+}
+
+.pln-stage .pln-preview {
+  transform: rotate(var(--map-deg, 0deg));
+  transform-origin: center center;
+}
+
 .pln-clip {
   fill-opacity: 0.92;
   stroke-dasharray: 12 8;

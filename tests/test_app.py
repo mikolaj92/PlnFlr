@@ -65,6 +65,11 @@ def test_home_uses_range_sliders_for_bounded_numbers() -> None:
     assert 'type="range"' in expansion and 'min="0"' in expansion and 'max="30"' in expansion
     assert 'type="range"' not in width
     assert 'id="expansion_auto"' in html
+    assert 'x-show="kind === \'tile\'"' in html or "kind === 'tile'" in html
+    assert "into_window" in html
+    assert "Prostopadle do okna" in html
+    assert "mapDeg" in html
+    assert "Obrót mapy" in html
 
 
 def test_product_templates_use_current_basecoat_card_contract() -> None:

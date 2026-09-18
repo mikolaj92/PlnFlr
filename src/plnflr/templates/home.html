@@ -2,15 +2,17 @@
 {% from "app_factory/components/file_upload.html" import file_upload %}
 
 {% block content %}
-<section class="app-stack" x-data="{
+<section class="app-stack" x-bind:style="'--map-deg:' + mapDeg + 'deg'" x-data="{
         shape: '{{ form.shape }}',
         kind: '{{ form.kind }}',
+        kindB: '{{ form.kind_b }}',
         split: '{{ form.split }}',
         angleDeg: {{ form.angle_deg or 0 }},
         groutMm: {{ form.grout_mm or 3 }},
         boardsPerPack: {{ form.boards_per_pack or 8 }},
         expansionMm: {{ form.expansion_mm if form.expansion_mm else 10 }},
-        expansionAuto: {{ 'true' if not form.expansion_mm else 'false' }}
+        expansionAuto: {{ 'true' if not form.expansion_mm else 'false' }},
+        mapDeg: 0
       }">
   <div class="card">
     <header>
@@ -113,6 +115,10 @@
             <span class="text-sm font-medium">Progi jako wielokąty (m): x,y na linię, pusta linia oddziela listwy</span>
             <textarea id="door_vertices" class="input" name="door_vertices" rows="6">{{ form.door_vertices }}</textarea>
           </label>
+          <label class="app-stack app-stack--tight" for="window_segments">
+            <span class="text-sm font-medium">Okna (m): x1,y1,x2,y2 — deski prostopadle do ściany</span>
+            <textarea id="window_segments" class="input" name="window_segments" rows="3">{{ form.window_segments }}</textarea>
+          </label>
         </fieldset>
 
         <fieldset class="app-stack app-stack--tight">
@@ -138,7 +144,7 @@
           </label>
         </div>
 
-        <div class="app-card-grid" x-show="kind === 'tile' || split !== 'none'" x-cloak>
+        <div class="app-card-grid" x-show="kind === 'tile' || (split !== 'none' && kindB === 'tile')" x-cloak>
           <label class="app-stack app-stack--tight" for="tile_length_m">
             <span class="text-sm font-medium">Długość płytki (m)</span>
             <input id="tile_length_m" class="input" name="tile_length_m" value="{{ form.tile_length_m }}">
@@ -167,6 +173,7 @@
             <select id="direction" class="input" name="direction">
               <option value="along_long"{% if form.direction == 'along_long' %} selected{% endif %}>Wzdłuż dłuższego boku</option>
               <option value="along_short"{% if form.direction == 'along_short' %} selected{% endif %}>Wzdłuż krótszego boku</option>
+              <option value="into_window"{% if form.direction == 'into_window' %} selected{% endif %}>Prostopadle do okna</option>
             </select>
           </label>
           <label class="app-stack app-stack--tight" for="stagger" x-show="kind === 'plank'">
@@ -179,6 +186,10 @@
           <label class="app-stack app-stack--tight" for="angle_deg">
             <span class="text-sm font-medium">Kąt siatki: <span x-text="angleDeg"></span>°</span>
             <input id="angle_deg" class="input" type="range" name="angle_deg" min="0" max="90" step="1" value="{{ form.angle_deg }}" x-model.number="angleDeg">
+          </label>
+          <label class="app-stack app-stack--tight" for="map_deg">
+            <span class="text-sm font-medium">Obrót mapy: <span x-text="mapDeg"></span>°</span>
+            <input id="map_deg" class="input" type="range" min="0" max="360" step="1" x-model.number="mapDeg">
           </label>
         </div>
 
@@ -198,7 +209,7 @@
           </label>
           <label class="app-stack app-stack--tight" for="kind_b">
             <span class="text-sm font-medium">Druga strefa</span>
-            <select id="kind_b" class="input" name="kind_b">
+            <select id="kind_b" class="input" name="kind_b" x-model="kindB">
               <option value="plank"{% if form.kind_b == 'plank' %} selected{% endif %}>Deska / panel</option>
               <option value="tile"{% if form.kind_b == 'tile' %} selected{% endif %}>Płytka</option>
             </select>

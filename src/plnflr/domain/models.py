@@ -60,7 +60,9 @@ class LayoutRules:
     min_end_length_mm: int = 300
     min_stagger_mm: int = 300
     stagger: Literal["third", "half"] = "third"
-    direction: Literal["along_long", "along_short", "along_x", "along_y"] = "along_long"
+    direction: Literal[
+        "along_long", "along_short", "along_x", "along_y", "into_window"
+    ] = "along_long"
     min_tile_cut_mm: int = 30
     intermediate_joint_mm: int = 8000
     angle_deg: int = 0
@@ -94,6 +96,13 @@ class Threshold:
 
 
 @dataclass(frozen=True, slots=True)
+class Opening:
+    label: str
+    start: Vertex
+    end: Vertex
+
+
+@dataclass(frozen=True, slots=True)
 class BillOfMaterials:
     pieces: int
     full_boards: int
@@ -122,3 +131,4 @@ class LayoutPlan:
     boms: tuple[BillOfMaterials, ...] = ()
     divider: tuple[Vertex, Vertex] | None = None
     thresholds: tuple[Threshold, ...] = ()
+    windows: tuple[Opening, ...] = ()

@@ -8,7 +8,7 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 
-from plnflr.domain.models import Ring, Room, Threshold, Vertex
+from plnflr.domain.models import Opening, Ring, Room, Threshold, Vertex
 from plnflr.domain.units import metres_to_mm_coord
 from plnflr.engine.clip import normalize_ring
 from plnflr.importing.usda import UsdaMesh, parse_usda_mesh, transform_point
@@ -32,6 +32,8 @@ class CapturedScan:
     vertices_m: str
     hole_rectangles: str
     door_vertices: str
+    windows: tuple[Opening, ...]
+    window_segments: str
 
 
 def room_from_usdz(payload: bytes) -> CapturedScan:
@@ -56,6 +58,7 @@ def room_from_usdz(payload: bytes) -> CapturedScan:
     fireplace_rects: list[str] = []
     thresholds: list[Threshold] = []
     door_polys: list[str] = []
+    windows: list[Opening] = []
     for name in names:
         if not name.endswith(".usda") or "/Mesh/" not in name:
             continue
@@ -70,6 +73,8 @@ def room_from_usdz(payload: bytes) -> CapturedScan:
             threshold = _door_threshold(mesh, origin)
             thresholds.append(threshold)
             door_polys.append(_ring_to_vertices_m(threshold.geometry))
+        elif category.startswith("window"):
+            windows.append(_window_opening(mesh, origin))
     holes = tuple(fireplaces) + tuple(item.geometry for item in thresholds)
     return CapturedScan(
         name=_room_name(archive.read("Scan.usda").decode()),
@@ -78,6 +83,8 @@ def room_from_usdz(payload: bytes) -> CapturedScan:
         vertices_m=_ring_to_vertices_m(outer),
         hole_rectangles="\n".join(fireplace_rects),
         door_vertices="\n\n".join(door_polys),
+        windows=tuple(windows),
+        window_segments="\n".join(_opening_to_segment_m(item) for item in windows),
     )
 
 
@@ -153,6 +160,32 @@ def _ordered_ring_m(points: list[tuple[float, float]]) -> list[tuple[float, floa
 def _box_ring(mesh: UsdaMesh, origin: tuple[float, float]) -> tuple[Ring, str]:
     ring = _ring_mm(_ordered_ring_m(_box_corners_m(mesh)), origin)
     return ring, _ring_to_rect_m(ring)
+
+
+def _window_opening(mesh: UsdaMesh, origin: tuple[float, float]) -> Opening:
+    corners = [
+        (max(0.0, point[0] - origin[0]), max(0.0, point[1] - origin[1]))
+        for point in _ordered_ring_m(_box_corners_m(mesh))
+    ]
+    ring = _ring_mm(corners, (0.0, 0.0))
+    verts = ring.vertices
+    edges = []
+    for index, vertex in enumerate(verts):
+        nxt = verts[(index + 1) % len(verts)]
+        length = (nxt.x_mm - vertex.x_mm) ** 2 + (nxt.y_mm - vertex.y_mm) ** 2
+        wall = min(vertex.x_mm + vertex.y_mm, nxt.x_mm + nxt.y_mm)
+        edges.append((length, -wall, index))
+    _, _, long_i = max(edges)
+    start = verts[long_i]
+    end = verts[(long_i + 1) % len(verts)]
+    return Opening(label="okno", start=start, end=end)
+
+
+def _opening_to_segment_m(opening: Opening) -> str:
+    return (
+        f"{opening.start.x_mm / 1000:.3f},{opening.start.y_mm / 1000:.3f},"
+        f"{opening.end.x_mm / 1000:.3f},{opening.end.y_mm / 1000:.3f}"
+    )
 
 
 def _door_threshold(mesh: UsdaMesh, origin: tuple[float, float]) -> Threshold:

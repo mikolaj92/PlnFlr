@@ -27,6 +27,7 @@ def default_form() -> dict[str, str]:
         "hole_vertices": "",
         "door_rectangles": "",
         "door_vertices": "",
+        "window_segments": "",
         "plank_length_m": "1.383",
         "plank_width_m": "0.156",
         "boards_per_pack": "8",

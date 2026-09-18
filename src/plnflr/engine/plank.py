@@ -8,6 +8,7 @@ from typing import Literal
 from plnflr.domain.models import (
     LayoutPlan,
     LayoutRules,
+    Opening,
     Piece,
     PlankSpec,
     Room,
@@ -22,9 +23,23 @@ from plnflr.engine.instructions import instructions_for
 from plnflr.engine.rotate import origin_of, rotate_points, rotate_room
 
 
-def _direction(room: Room, rules: LayoutRules) -> Literal["along_x", "along_y"]:
+def _direction(
+    room: Room,
+    rules: LayoutRules,
+    windows: tuple[Opening, ...] = (),
+) -> Literal["along_x", "along_y"]:
     if rules.direction in {"along_x", "along_y"}:
         return rules.direction
+    if rules.direction == "into_window" and windows:
+        window = max(
+            windows,
+            key=lambda item: abs(item.end.x_mm - item.start.x_mm)
+            + abs(item.end.y_mm - item.start.y_mm),
+        )
+        along_wall_x = abs(window.end.x_mm - window.start.x_mm) >= abs(
+            window.end.y_mm - window.start.y_mm
+        )
+        return "along_y" if along_wall_x else "along_x"
     min_x, min_y, max_x, max_y = bbox(room)
     along_long = (max_x - min_x) >= (max_y - min_y)
     if rules.direction == "along_short":
@@ -33,9 +48,12 @@ def _direction(room: Room, rules: LayoutRules) -> Literal["along_x", "along_y"]:
 
 
 def _lay_axis(
-    inner: Room, spec: PlankSpec, rules: LayoutRules
+    inner: Room,
+    spec: PlankSpec,
+    rules: LayoutRules,
+    windows: tuple[Opening, ...] = (),
 ) -> tuple[tuple[Piece, ...], Literal["along_x", "along_y"], list[Warning]]:
-    direction = _direction(inner, rules)
+    direction = _direction(inner, rules, windows)
     min_x, min_y, max_x, max_y = bbox(inner)
     span = max(max_x - min_x, max_y - min_y)
     warnings: list[Warning] = []
@@ -96,13 +114,18 @@ def _lay_axis(
     return tuple(pieces), direction, warnings
 
 
-def layout_planks(room: Room, spec: PlankSpec, rules: LayoutRules) -> LayoutPlan:
+def layout_planks(
+    room: Room,
+    spec: PlankSpec,
+    rules: LayoutRules,
+    windows: tuple[Opening, ...] = (),
+) -> LayoutPlan:
     gap = resolve_gap_mm(room, rules)
     inner = inset_room(room, gap)
     angle = int(rules.angle_deg) % 360
     origin = origin_of(inner)
     grid_room = rotate_room(inner, angle, origin) if angle else inner
-    pieces, direction, warnings = _lay_axis(grid_room, spec, rules)
+    pieces, direction, warnings = _lay_axis(grid_room, spec, rules, windows)
     if angle:
         pieces = tuple(
             replace(
@@ -132,12 +155,21 @@ def layout_planks(room: Room, spec: PlankSpec, rules: LayoutRules) -> LayoutPlan
     )
     min_x, min_y, max_x, max_y = bbox(inner)
     longer_x = (max_x - min_x) >= (max_y - min_y)
-    axis = "dłuższego" if direction == "along_x" and longer_x else "wybranego"
+    if rules.direction == "into_window" and windows:
+        axis = "prostopadle do ściany z oknem"
+    else:
+        axis = "dłuższego" if direction == "along_x" and longer_x else "wybranego"
     angle_note = f" Kąt {angle}°." if angle else ""
-    rationale = (
-        f"Kierunek {direction.replace('_', ' ')} — deski wzdłuż {axis} boku. "
-        f"Dylatacja {gap} mm. Siatka na bbox, przycięcie do obrysu.{angle_note}"
-    )
+    if rules.direction == "into_window" and windows:
+        rationale = (
+            f"Deski prostopadle do okna ({axis}). "
+            f"Dylatacja {gap} mm. Siatka na bbox, przycięcie do obrysu.{angle_note}"
+        )
+    else:
+        rationale = (
+            f"Kierunek {direction.replace('_', ' ')} — deski wzdłuż {axis} boku. "
+            f"Dylatacja {gap} mm. Siatka na bbox, przycięcie do obrysu.{angle_note}"
+        )
     return LayoutPlan(
         room=room,
         gap_mm=gap,
@@ -152,4 +184,5 @@ def layout_planks(room: Room, spec: PlankSpec, rules: LayoutRules) -> LayoutPlan
         ),
         angle_deg=angle,
         boms=(bom,),
+        windows=windows,
     )
