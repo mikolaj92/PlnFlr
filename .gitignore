@@ -15,4 +15,6 @@ build/
 logs/
 .hermes/
 data/*.json
+.build/
+.swiftpm/
 

@@ -12,6 +12,7 @@ uv run plnflr
 # http://127.0.0.1:8004
 # live: https://plnflr.patryk.it
 uv run pytest
+swift test --package-path Kernel
 ```
 
 v0.1: lista pokoi jednego otwartego użytkownika. User podaje obrys, kąt i ewentualną podziałkę (np. pół kafelki, pół panele) albo wgrywa skan RoomPlan (USDZ). Serwer liczy dylatację, siatkę, docinki, odcięcia na progach (listwa), BOM i kolejność. Bez kont.
