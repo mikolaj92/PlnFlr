@@ -18,8 +18,8 @@ public struct Room: Equatable, Hashable, Sendable {
 }
 
 public enum Stagger: String, Equatable, Sendable {
-    case third
     case half
+    case third
 }
 
 public enum LayDirection: String, Equatable, Sendable {
@@ -35,6 +35,11 @@ public enum Axis: String, Equatable, Sendable {
     case alongY = "along_y"
 }
 
+public enum SplitAxis: String, Equatable, Sendable {
+    case x
+    case y
+}
+
 public struct LayoutRules: Equatable, Sendable {
     public var angleDeg: Int
     public var direction: LayDirection
@@ -44,6 +49,7 @@ public struct LayoutRules: Equatable, Sendable {
     public var intermediateJointMm: Int
     public var minEndLengthMm: Int
     public var minRowWidthMm: Int
+    public var minTileCutMm: Int
     public var stagger: Stagger
 
     public init(
@@ -54,6 +60,7 @@ public struct LayoutRules: Equatable, Sendable {
         minEndLengthMm: Int = 300,
         stagger: Stagger = .third,
         direction: LayDirection = .alongLong,
+        minTileCutMm: Int = 30,
         intermediateJointMm: Int = 8000,
         angleDeg: Int = 0
     ) {
@@ -65,6 +72,7 @@ public struct LayoutRules: Equatable, Sendable {
         self.intermediateJointMm = intermediateJointMm
         self.minEndLengthMm = minEndLengthMm
         self.minRowWidthMm = minRowWidthMm
+        self.minTileCutMm = minTileCutMm
         self.stagger = stagger
     }
 }
@@ -78,6 +86,48 @@ public struct PlankSpec: Equatable, Sendable {
         self.boardsPerPack = boardsPerPack
         self.lengthMm = lengthMm
         self.widthMm = widthMm
+    }
+}
+
+public struct TileSpec: Equatable, Sendable {
+    public var groutMm: Int
+    public var lengthMm: Int
+    public var tilesPerPack: Int?
+    public var widthMm: Int
+
+    public init(lengthMm: Int, widthMm: Int, groutMm: Int = 3, tilesPerPack: Int? = nil) {
+        self.groutMm = groutMm
+        self.lengthMm = lengthMm
+        self.tilesPerPack = tilesPerPack
+        self.widthMm = widthMm
+    }
+}
+
+public enum ZoneKind: String, Equatable, Sendable {
+    case mixed
+    case plank
+    case tile
+}
+
+public struct Zone: Equatable, Sendable {
+    public var angleDeg: Int?
+    public var kind: ZoneKind
+    public var label: String?
+    public var plank: PlankSpec?
+    public var tile: TileSpec?
+
+    public init(
+        kind: ZoneKind,
+        plank: PlankSpec? = nil,
+        tile: TileSpec? = nil,
+        angleDeg: Int? = nil,
+        label: String? = nil
+    ) {
+        self.angleDeg = angleDeg
+        self.kind = kind
+        self.label = label
+        self.plank = plank
+        self.tile = tile
     }
 }
 
@@ -99,6 +149,8 @@ public enum PieceKind: String, Equatable, Sendable {
     case full
     case rip
     case startCut = "start_cut"
+    case tileCut = "tile_cut"
+    case tileFull = "tile_full"
 }
 
 public struct Piece: Equatable, Sendable {
@@ -110,6 +162,29 @@ public struct Piece: Equatable, Sendable {
     public var rowIndex: Int
     public var sourceBoard: Int
     public var widthMm: Int
+    public var zoneIndex: Int
+
+    public init(
+        geometry: [Vertex],
+        installOrder: Int,
+        kind: PieceKind,
+        lengthMm: Int,
+        pieceId: String,
+        rowIndex: Int,
+        sourceBoard: Int,
+        widthMm: Int,
+        zoneIndex: Int = 0
+    ) {
+        self.geometry = geometry
+        self.installOrder = installOrder
+        self.kind = kind
+        self.lengthMm = lengthMm
+        self.pieceId = pieceId
+        self.rowIndex = rowIndex
+        self.sourceBoard = sourceBoard
+        self.widthMm = widthMm
+        self.zoneIndex = zoneIndex
+    }
 }
 
 public struct Warning: Equatable, Sendable {
@@ -121,20 +196,55 @@ public struct BillOfMaterials: Equatable, Sendable {
     public var areaBoughtMm2: Int
     public var areaNetMm2: Int
     public var fullBoards: Int
+    public var kind: ZoneKind
+    public var label: String
     public var packs: Int?
     public var pieces: Int
     public var wastePct: String
 }
 
-public struct LayoutPlan: Equatable, Sendable {
+public struct LayoutPlan: Sendable {
+    public var angleDeg: Int
     public var bom: BillOfMaterials
+    public var boms: [BillOfMaterials]
     public var direction: Axis
+    public var divider: (Vertex, Vertex)?
     public var gapMm: Int
     public var inset: Room
     public var pieces: [Piece]
     public var rationalePl: String
     public var room: Room
     public var rowsInstructionPl: [String]
+    public var splitAtMm: Int?
+    public var splitAxis: SplitAxis?
     public var warnings: [Warning]
     public var windows: [Opening]
+}
+
+extension LayoutPlan: Equatable {
+    public static func == (lhs: LayoutPlan, rhs: LayoutPlan) -> Bool {
+        lhs.angleDeg == rhs.angleDeg
+            && lhs.bom == rhs.bom
+            && lhs.boms == rhs.boms
+            && lhs.direction == rhs.direction
+            && lhs.gapMm == rhs.gapMm
+            && lhs.inset == rhs.inset
+            && lhs.pieces == rhs.pieces
+            && lhs.rationalePl == rhs.rationalePl
+            && lhs.room == rhs.room
+            && lhs.rowsInstructionPl == rhs.rowsInstructionPl
+            && lhs.splitAtMm == rhs.splitAtMm
+            && lhs.splitAxis == rhs.splitAxis
+            && lhs.warnings == rhs.warnings
+            && lhs.windows == rhs.windows
+            && optionalPairEqual(lhs.divider, rhs.divider)
+    }
+}
+
+private func optionalPairEqual(_ a: (Vertex, Vertex)?, _ b: (Vertex, Vertex)?) -> Bool {
+    switch (a, b) {
+    case (nil, nil): true
+    case let (l?, r?): l.0 == r.0 && l.1 == r.1
+    default: false
+    }
 }

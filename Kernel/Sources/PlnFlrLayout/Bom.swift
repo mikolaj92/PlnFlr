@@ -13,7 +13,9 @@ func makeBom(
     fullBoards: Int,
     boardsPerPack: Int?,
     areaNetMm2: Int,
-    boardAreaMm2: Int
+    boardAreaMm2: Int,
+    label: String = "",
+    kind: ZoneKind = .plank
 ) -> BillOfMaterials {
     let bought = fullBoards * boardAreaMm2
     var packs: Int?
@@ -24,6 +26,8 @@ func makeBom(
         areaBoughtMm2: bought,
         areaNetMm2: areaNetMm2,
         fullBoards: fullBoards,
+        kind: kind,
+        label: label,
         packs: packs,
         pieces: pieces,
         wastePct: wastePct(areaBoughtMm2: bought, areaNetMm2: areaNetMm2)

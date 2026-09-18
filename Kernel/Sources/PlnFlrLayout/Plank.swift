@@ -114,7 +114,9 @@ public func layoutPlanks(
         fullBoards: pieces.map(\.sourceBoard).max() ?? 0,
         boardsPerPack: spec.boardsPerPack,
         areaNetMm2: net,
-        boardAreaMm2: spec.lengthMm * spec.widthMm
+        boardAreaMm2: spec.lengthMm * spec.widthMm,
+        label: "Panele",
+        kind: .plank
     )
     let innerBounds = bbox(inner)
     let longerX = (innerBounds.maxX - innerBounds.minX) >= (innerBounds.maxY - innerBounds.minY)
@@ -134,14 +136,19 @@ public func layoutPlanks(
             "Kierunek \(axis.rawValue.replacingOccurrences(of: "_", with: " ")) — deski wzdłuż \(axisWord) boku. Dylatacja \(gap) mm. Siatka na bbox, przycięcie do obrysu.\(angleNote)"
     }
     return LayoutPlan(
+        angleDeg: angle,
         bom: bom,
+        boms: [bom],
         direction: axis,
+        divider: nil,
         gapMm: gap,
         inset: inner,
         pieces: pieces,
         rationalePl: rationale,
         room: room,
         rowsInstructionPl: instructionsFor(pieces, gapMm: gap, hasHoles: !room.holes.isEmpty),
+        splitAtMm: nil,
+        splitAxis: nil,
         warnings: warnings,
         windows: windows
     )

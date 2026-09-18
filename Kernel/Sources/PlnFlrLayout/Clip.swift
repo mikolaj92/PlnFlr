@@ -232,28 +232,90 @@ public func inset(outer: [Vertex], holes: [[Vertex]], gapMm: Int) throws -> (
         }
         return (inner.vertices, grown)
     }
-    return (try offsetOrthogonal(outer, delta: -gapMm), grown)
+    if isOrthogonal(outer) {
+        return (try offsetOrthogonal(outer, delta: -gapMm), grown)
+    }
+    return (try offsetConvex(outer, delta: -gapMm), grown)
 }
 
 public func intersectRect(_ rect: [Vertex], outer: [Vertex], holes: [[Vertex]]) throws
     -> [[Vertex]]
 {
     guard let subject = AABB(rect) else { return [] }
-    let clips: [AABB]
     if let box = AABB(outer) {
-        clips = [box]
-    } else {
-        clips = orthogonalRects(outer)
+        guard var parts = optionalList(subject.intersection(box)) else { return [] }
+        for hole in holes {
+            guard let cut = AABB(hole) else { continue }
+            parts = parts.flatMap { $0.subtracting(cut) }
+        }
+        return parts.map(\.vertices)
     }
-    var parts: [AABB] = []
-    for clip in clips {
-        if let hit = subject.intersection(clip) { parts.append(hit) }
+    if isOrthogonal(outer) {
+        var parts: [AABB] = []
+        for clip in orthogonalRects(outer) {
+            if let hit = subject.intersection(clip) { parts.append(hit) }
+        }
+        for hole in holes {
+            guard let cut = AABB(hole) else { continue }
+            parts = parts.flatMap { $0.subtracting(cut) }
+        }
+        return parts.map(\.vertices)
     }
-    for hole in holes {
-        guard let cut = AABB(hole) else { continue }
-        parts = parts.flatMap { $0.subtracting(cut) }
+    let clipped = intersectConvex(subject.vertices, outer)
+    guard clipped.count >= 3 else { return [] }
+    // ponytail: convex clip only; non-rect holes need Clipper
+    _ = holes
+    return [clipped]
+}
+
+private func optionalList(_ box: AABB?) -> [AABB]? {
+    box.map { [$0] }
+}
+
+func offsetConvex(_ vertices: [Vertex], delta: Int) throws -> [Vertex] {
+    let points = normalizeRing(vertices)
+    guard points.count >= 3 else { throw LayoutError.expansionGapLeavesNoArea }
+    let n = points.count
+    var lines: [(Vertex, Vertex)] = []
+    for i in 0..<n {
+        let a = points[i]
+        let b = points[(i + 1) % n]
+        let dx = Double(b.xMm - a.xMm)
+        let dy = Double(b.yMm - a.yMm)
+        let len = (dx * dx + dy * dy).squareRoot()
+        guard len > 0 else { continue }
+        // Outward for CCW: rotate 90 CW. Negative delta shrinks.
+        let nx = dy / len * Double(delta)
+        let ny = -dx / len * Double(delta)
+        lines.append(
+            (
+                Vertex(Int((Double(a.xMm) + nx).rounded()), Int((Double(a.yMm) + ny).rounded())),
+                Vertex(Int((Double(b.xMm) + nx).rounded()), Int((Double(b.yMm) + ny).rounded()))
+            )
+        )
     }
-    return parts.map(\.vertices)
+    guard lines.count == n else { throw LayoutError.expansionGapLeavesNoArea }
+    var out: [Vertex] = []
+    for i in 0..<n {
+        let prev = lines[(i + n - 1) % n]
+        let cur = lines[i]
+        guard let hit = lineIntersection(prev.0, prev.1, cur.0, cur.1) else {
+            throw LayoutError.expansionGapLeavesNoArea
+        }
+        out.append(hit)
+    }
+    if abs(signedAreaMm2(out)) < 1 { throw LayoutError.expansionGapLeavesNoArea }
+    return normalizeRing(out)
+}
+
+private func lineIntersection(_ a: Vertex, _ b: Vertex, _ c: Vertex, _ d: Vertex) -> Vertex? {
+    let x1 = Double(a.xMm), y1 = Double(a.yMm), x2 = Double(b.xMm), y2 = Double(b.yMm)
+    let x3 = Double(c.xMm), y3 = Double(c.yMm), x4 = Double(d.xMm), y4 = Double(d.yMm)
+    let den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    guard den != 0 else { return nil }
+    let px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den
+    let py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den
+    return Vertex(Int(px.rounded()), Int(py.rounded()))
 }
 
 public func insetRoom(_ room: Room, gapMm: Int) throws -> Room {
