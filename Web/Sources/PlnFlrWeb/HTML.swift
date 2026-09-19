@@ -46,13 +46,6 @@ func htmlPage(title: String, navActive: String, rooms: [SavedRoom], content: Str
             <ul role="list">\(navItem(label: "Nowy pokój", href: "/rooms/new", icon: iconAdd, key: "new-room", active: navActive == "new-room"))</ul>
           </div>
         </section>
-        <footer>
-          <div class="app-sidebar__footer" data-platform-foot>
-            <div class="app-stack app-stack--tight w-full" data-platform-auth>
-              <a class="btn w-full" data-variant="primary" data-size="sm" href="/" data-no-htmx="true">Login</a>
-            </div>
-          </div>
-        </footer>
       </nav>
     </aside>
     <main class="main app-main" id="app-main">

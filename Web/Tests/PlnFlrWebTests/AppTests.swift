@@ -14,6 +14,16 @@ import PlnFlrWeb
     }
 }
 
+@Test func chromeHasNoLoginButton() async throws {
+    try await withWeb { client, store in
+        let room = store.ensureDefault(userID: openUserID)
+        let text = try await html(try await client.get("rooms/\(room.id)"))
+        #expect(!text.contains(">Login</a>"))
+        #expect(!text.contains("data-platform-auth"))
+        #expect(text.contains("Nowy pokój"))
+    }
+}
+
 @Test func homeUsesPlatformAssetsNotCdn() async throws {
     try await withWeb { client, store in
         let room = store.ensureDefault(userID: openUserID)
