@@ -5,8 +5,8 @@ import PackageDescription
 let package = Package(
     name: "PlnFlrKernel",
     platforms: [
-        .iOS(.v26),
-        .macOS(.v26),
+        .iOS("26.4"),
+        .macOS("26.4"),
     ],
     products: [
         .library(name: "PlnFlrLayout", targets: ["PlnFlrLayout"]),
