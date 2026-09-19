@@ -1,76 +1,56 @@
 import Foundation
-import HTTPTypes
-import NIOCore
 import PlnFlrLayout
 import Testing
-import Vapor
-import VaporTesting
-import PlnFlrWeb
 
-@Test func roomPageUsesFileUpload() async throws {
-    try await withWeb { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let text = try await html(try await client.get("rooms/\(room.id)"))
-        #expect(text.contains("data-app-file-upload"))
-        #expect(text.contains("app-dropzone"))
-        #expect(text.contains("name=\"scan\""))
-        #expect(text.contains("data-max-bytes="))
-        #expect(text.contains("hx-encoding=\"multipart/form-data\""))
-        #expect(text.contains("__appFileUploadBooted"))
-    }
+@Test func roomplanFloorIsPolygonInMillimetres() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.name == "Salon")
+    let verts = captured.room.outer.vertices.map { ($0.xMm, $0.yMm) }
+    #expect(verts.contains { $0 == (0, 0) })
+    #expect(verts.contains { $0 == (4000, 0) })
+    #expect(verts.contains { $0 == (4000, 3000) })
+    #expect(verts.contains { $0 == (0, 3000) })
+    #expect(verts.count == 4)
+    #expect(captured.room.outer.vertices[0] == Vertex(0, 0))
 }
 
-@Test func uploadUsdzFillsPolygonAndDoors() async throws {
-    try await withWeb { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let res = try await client.post(
-            "rooms/\(room.id)/scan",
-            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
-        )
-        #expect(res.status == .seeOther)
-        let saved = store.get(room.id, userID: openUserID)
-        #expect(saved?.form["shape"] == "polygon")
-        #expect(saved?.form["vertices"]?.contains("0,0") == true)
-        #expect((saved?.form["door_vertices"] ?? "").isEmpty == false)
-        #expect(saved?.form["door_rectangles"] == "")
-        #expect((saved?.form["hole_rectangles"] ?? "").isEmpty == false)
-    }
+@Test func roomplanFireplaceIsAHole() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.room.holes.count == 2)
+    let fire = captured.room.holes[0]
+    let xs = fire.vertices.map(\.xMm)
+    let ys = fire.vertices.map(\.yMm)
+    #expect(xs.min() == 700 && xs.max() == 1300)
+    #expect(ys.min() == 1100 && ys.max() == 1900)
 }
 
-@Test func htmxScanRedirectsFullPage() async throws {
-    try await withWeb { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let res = try await client.post(
-            "rooms/\(room.id)/scan",
-            headers: [HTTPField.Name("HX-Request")!: "true"],
-            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
-        )
-        #expect(res.status == .seeOther)
-        #expect(res.headers.hxRedirect == "/rooms/\(room.id)")
-    }
+@Test func roomplanDoorIsThresholdStrip() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.thresholds.count == 1)
+    let strip = captured.thresholds[0]
+    #expect(strip.label == "listwa progowa")
+    #expect(strip.lengthMm == 900)
+    #expect(strip.widthMm == 80)
+    let door = captured.room.holes[1]
+    let xs = door.vertices.map(\.xMm)
+    let ys = door.vertices.map(\.yMm)
+    #expect(xs.min() == 1550 && xs.max() == 2450)
+    #expect(ys.min() == 0 && ys.max() == 80)
 }
 
-@Test func oversizedScanIsRejected() async throws {
-    try await withWeb(scanMaxBytes: 64) { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let res = try await client.post(
-            "rooms/\(room.id)/scan",
-            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
-        )
-        #expect(res.status == .contentTooLarge)
-        let saved = store.get(room.id, userID: openUserID)
-        #expect(saved?.form["shape"] != "polygon")
-    }
+@Test func roomplanWindowIsOpeningNotHole() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.windows.count == 1)
+    let window = captured.windows[0]
+    #expect(window.label == "okno")
+    let xs = [window.start.xMm, window.end.xMm]
+    let ys = [window.start.yMm, window.end.yMm]
+    #expect(xs.min() == 1500 && xs.max() == 2500)
+    #expect(ys.min() == 0 && ys.max() == 0)
+    #expect(!captured.windowSegments.isEmpty)
 }
 
-private func salonUsdz() -> Data {
-    var buf = Data()
-    // Built as a zip below.
-    buf = makeSalonZip()
-    return buf
-}
-
-private func makeSalonZip() -> Data {
+func salonUsdz() -> Data {
     let root = """
     #usda 1.0
     (
@@ -183,9 +163,6 @@ private func zipData(_ files: [String: Data]) -> Data {
     }
     let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
     let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-    task.arguments = ["-c", "-k", "--keepParent", dir.path, zipURL.path]
-    // ditto --keepParent wraps the folder; use zip instead.
     task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     task.currentDirectoryURL = dir
     task.arguments = ["-r", "-q", zipURL.path, "."]

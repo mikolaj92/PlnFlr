@@ -1,5 +1,4 @@
 import Foundation
-import PlnFlrLayout
 
 public struct CapturedScan: Sendable {
     public var name: String

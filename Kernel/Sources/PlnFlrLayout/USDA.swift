@@ -113,7 +113,7 @@ private func slice(_ text: String, after start: String, until end: String) -> St
     return String(rest[..<close.lowerBound])
 }
 
-enum ScanError: Error, Equatable, LocalizedError {
+public enum ScanError: Error, Equatable, LocalizedError {
     case notZip
     case notRoomPlan
     case missingFloor
@@ -124,7 +124,7 @@ enum ScanError: Error, Equatable, LocalizedError {
     case noPlan(String)
     case tooLarge
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .notZip: "to nie jest RoomPlan USDZ"
         case .notRoomPlan: "USDZ nie jest skanem RoomPlan (brak Scan.usda)"

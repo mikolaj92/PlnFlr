@@ -35,7 +35,7 @@ public enum Axis: String, Equatable, Sendable {
     case alongY = "along_y"
 }
 
-public enum SplitAxis: String, Equatable, Sendable {
+public enum SplitAxis: String, Equatable, Hashable, Sendable {
     case x
     case y
 }

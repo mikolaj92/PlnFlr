@@ -1,76 +1,74 @@
+import ComposableArchitecture2
 import Foundation
-import HTTPTypes
-import NIOCore
+import PlnFlrCapture
 import PlnFlrLayout
 import Testing
-import Vapor
-import VaporTesting
-import PlnFlrWeb
 
-@Test func roomPageUsesFileUpload() async throws {
-    try await withWeb { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let text = try await html(try await client.get("rooms/\(room.id)"))
-        #expect(text.contains("data-app-file-upload"))
-        #expect(text.contains("app-dropzone"))
-        #expect(text.contains("name=\"scan\""))
-        #expect(text.contains("data-max-bytes="))
-        #expect(text.contains("hx-encoding=\"multipart/form-data\""))
-        #expect(text.contains("__appFileUploadBooted"))
+@Test func importUsdzAddsRoomToHouse() async throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    let id = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let store = await TestStoreActor(initialState: House.State()) {
+        House()
+    }
+    await store.send(.importUsdz(salonUsdz())) {
+        $0.rooms = [
+            House.RoomItem(
+                id: id,
+                name: "Salon",
+                room: captured.room,
+                thresholds: captured.thresholds,
+                windows: captured.windows
+            ),
+        ]
+        $0.selectedID = id
     }
 }
 
-@Test func uploadUsdzFillsPolygonAndDoors() async throws {
-    try await withWeb { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let res = try await client.post(
-            "rooms/\(room.id)/scan",
-            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
+@Test func splitSelectedCutsHouseIntoTwoRooms() async throws {
+    let room = try rectangle(widthMm: 4000, heightMm: 3000)
+    let originalID = UUID(uuidString: "00000000-0000-0000-0000-000000000099")!
+    let leftID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let rightID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    let store = await TestStoreActor(
+        initialState: House.State(
+            rooms: [
+                House.RoomItem(
+                    id: originalID,
+                    name: "Salon",
+                    room: room,
+                    thresholds: [],
+                    windows: []
+                ),
+            ],
+            selectedID: originalID,
+            splitAtM: "1.500"
         )
-        #expect(res.status == .seeOther)
-        let saved = store.get(room.id, userID: openUserID)
-        #expect(saved?.form["shape"] == "polygon")
-        #expect(saved?.form["vertices"]?.contains("0,0") == true)
-        #expect((saved?.form["door_vertices"] ?? "").isEmpty == false)
-        #expect(saved?.form["door_rectangles"] == "")
-        #expect((saved?.form["hole_rectangles"] ?? "").isEmpty == false)
+    ) {
+        House()
     }
-}
-
-@Test func htmxScanRedirectsFullPage() async throws {
-    try await withWeb { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let res = try await client.post(
-            "rooms/\(room.id)/scan",
-            headers: [HTTPField.Name("HX-Request")!: "true"],
-            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
-        )
-        #expect(res.status == .seeOther)
-        #expect(res.headers.hxRedirect == "/rooms/\(room.id)")
-    }
-}
-
-@Test func oversizedScanIsRejected() async throws {
-    try await withWeb(scanMaxBytes: 64) { client, store in
-        let room = store.ensureDefault(userID: openUserID)
-        let res = try await client.post(
-            "rooms/\(room.id)/scan",
-            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
-        )
-        #expect(res.status == .contentTooLarge)
-        let saved = store.get(room.id, userID: openUserID)
-        #expect(saved?.form["shape"] != "polygon")
+    let (left, right) = try splitRoom(room, axis: .x, atMm: 1500)
+    await store.send(.splitSelectedButtonTapped) {
+        $0.rooms = [
+            House.RoomItem(
+                id: leftID,
+                name: "Salon A",
+                room: left!,
+                thresholds: [],
+                windows: []
+            ),
+            House.RoomItem(
+                id: rightID,
+                name: "Salon B",
+                room: right!,
+                thresholds: [],
+                windows: []
+            ),
+        ]
+        $0.selectedID = leftID
     }
 }
 
 private func salonUsdz() -> Data {
-    var buf = Data()
-    // Built as a zip below.
-    buf = makeSalonZip()
-    return buf
-}
-
-private func makeSalonZip() -> Data {
     let root = """
     #usda 1.0
     (
@@ -183,9 +181,6 @@ private func zipData(_ files: [String: Data]) -> Data {
     }
     let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
     let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-    task.arguments = ["-c", "-k", "--keepParent", dir.path, zipURL.path]
-    // ditto --keepParent wraps the folder; use zip instead.
     task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     task.currentDirectoryURL = dir
     task.arguments = ["-r", "-q", zipURL.path, "."]
