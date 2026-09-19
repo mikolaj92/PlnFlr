@@ -1,0 +1,93 @@
+/* Product-only styles. Chrome/Basecoat come from /static/platform. */
+
+.pln-preview {
+  width: 100%;
+  max-height: 80vh;
+  background: color-mix(in oklab, var(--background) 92%, var(--muted));
+  border: 1px solid var(--border);
+}
+
+.pln-stage {
+  overflow: auto;
+}
+
+.pln-room {
+  fill: color-mix(in oklab, var(--muted) 70%, var(--background));
+  stroke: var(--foreground);
+  stroke-width: 8;
+}
+
+.pln-gap {
+  fill: color-mix(in oklab, var(--destructive, #b91c1c) 18%, transparent);
+  pointer-events: none;
+}
+
+.pln-row-even {
+  fill: color-mix(in oklab, #b45309 55%, white);
+  stroke: #7c2d12;
+  stroke-width: 4;
+}
+
+.pln-row-odd {
+  fill: color-mix(in oklab, #d97706 40%, white);
+  stroke: #7c2d12;
+  stroke-width: 4;
+}
+
+.pln-zone-1.pln-row-even {
+  fill: color-mix(in oklab, #0369a1 55%, white);
+  stroke: #0c4a6e;
+}
+
+.pln-zone-1.pln-row-odd {
+  fill: color-mix(in oklab, #0284c7 40%, white);
+  stroke: #0c4a6e;
+}
+
+.pln-divider {
+  stroke: var(--foreground);
+  stroke-width: 12;
+  stroke-dasharray: 40 24;
+}
+
+.pln-threshold {
+  fill: color-mix(in oklab, var(--foreground) 55%, transparent);
+  stroke: var(--foreground);
+  stroke-width: 4;
+}
+
+.pln-window {
+  stroke: color-mix(in oklab, #0284c7 70%, var(--foreground));
+  stroke-width: 24;
+  stroke-linecap: square;
+}
+
+.pln-stage .pln-preview {
+  transform: rotate(var(--map-deg, 0deg));
+  transform-origin: center center;
+}
+
+.pln-clip {
+  fill-opacity: 0.92;
+  stroke-dasharray: 12 8;
+}
+
+.pln-label {
+  font-size: 90px;
+  fill: #1c1917;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  pointer-events: none;
+}
+
+[x-cloak] {
+  display: none !important;
+}
+
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request.htmx-indicator,
+.htmx-request .htmx-indicator {
+  display: inline;
+}

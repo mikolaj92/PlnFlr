@@ -1,0 +1,243 @@
+import Foundation
+import HTTPTypes
+import NIOCore
+import PlnFlrLayout
+import Testing
+import Vapor
+import VaporTesting
+import PlnFlrWeb
+
+@Test func roomPageUsesFileUpload() async throws {
+    try await withWeb { client, store in
+        let room = store.ensureDefault(userID: openUserID)
+        let text = try await html(try await client.get("rooms/\(room.id)"))
+        #expect(text.contains("data-app-file-upload"))
+        #expect(text.contains("app-dropzone"))
+        #expect(text.contains("name=\"scan\""))
+        #expect(text.contains("data-max-bytes="))
+        #expect(text.contains("hx-encoding=\"multipart/form-data\""))
+        #expect(text.contains("__appFileUploadBooted"))
+    }
+}
+
+@Test func uploadUsdzFillsPolygonAndDoors() async throws {
+    try await withWeb { client, store in
+        let room = store.ensureDefault(userID: openUserID)
+        let res = try await client.post(
+            "rooms/\(room.id)/scan",
+            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
+        )
+        #expect(res.status == .seeOther)
+        let saved = store.get(room.id, userID: openUserID)
+        #expect(saved?.form["shape"] == "polygon")
+        #expect(saved?.form["vertices"]?.contains("0,0") == true)
+        #expect((saved?.form["door_vertices"] ?? "").isEmpty == false)
+        #expect(saved?.form["door_rectangles"] == "")
+        #expect((saved?.form["hole_rectangles"] ?? "").isEmpty == false)
+    }
+}
+
+@Test func htmxScanRedirectsFullPage() async throws {
+    try await withWeb { client, store in
+        let room = store.ensureDefault(userID: openUserID)
+        let res = try await client.post(
+            "rooms/\(room.id)/scan",
+            headers: [HTTPField.Name("HX-Request")!: "true"],
+            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
+        )
+        #expect(res.status == .seeOther)
+        #expect(res.headers.hxRedirect == "/rooms/\(room.id)")
+    }
+}
+
+@Test func oversizedScanIsRejected() async throws {
+    try await withWeb(scanMaxBytes: 64) { client, store in
+        let room = store.ensureDefault(userID: openUserID)
+        let res = try await client.post(
+            "rooms/\(room.id)/scan",
+            content: ScanPost(scan: File(data: ByteBuffer(data: salonUsdz()), filename: "salon.usdz"))
+        )
+        #expect(res.status == .contentTooLarge)
+        let saved = store.get(room.id, userID: openUserID)
+        #expect(saved?.form["shape"] != "polygon")
+    }
+}
+
+@Test func roomplanFloorIsPolygonInMillimetres() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.name == "Salon")
+    let verts = captured.room.outer.vertices.map { ($0.xMm, $0.yMm) }
+    #expect(verts.contains { $0 == (0, 0) })
+    #expect(verts.contains { $0 == (4000, 0) })
+    #expect(verts.contains { $0 == (4000, 3000) })
+    #expect(verts.contains { $0 == (0, 3000) })
+    #expect(verts.count == 4)
+    #expect(captured.room.outer.vertices[0] == Vertex(0, 0))
+}
+
+@Test func roomplanFireplaceIsAHole() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.room.holes.count == 2)
+    let fire = captured.room.holes[0]
+    let xs = fire.vertices.map(\.xMm)
+    let ys = fire.vertices.map(\.yMm)
+    #expect(xs.min() == 700 && xs.max() == 1300)
+    #expect(ys.min() == 1100 && ys.max() == 1900)
+}
+
+@Test func roomplanDoorIsThresholdStrip() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.thresholds.count == 1)
+    let strip = captured.thresholds[0]
+    #expect(strip.label == "listwa progowa")
+    #expect(strip.lengthMm == 900)
+    #expect(strip.widthMm == 80)
+    let door = captured.room.holes[1]
+    let xs = door.vertices.map(\.xMm)
+    let ys = door.vertices.map(\.yMm)
+    #expect(xs.min() == 1550 && xs.max() == 2450)
+    #expect(ys.min() == 0 && ys.max() == 80)
+}
+
+@Test func roomplanWindowIsOpeningNotHole() throws {
+    let captured = try roomFromUsdz(salonUsdz())
+    #expect(captured.windows.count == 1)
+    let window = captured.windows[0]
+    #expect(window.label == "okno")
+    let xs = [window.start.xMm, window.end.xMm]
+    let ys = [window.start.yMm, window.end.yMm]
+    #expect(xs.min() == 1500 && xs.max() == 2500)
+    #expect(ys.min() == 0 && ys.max() == 0)
+    #expect(!captured.windowSegments.isEmpty)
+}
+
+private func salonUsdz() -> Data {
+    var buf = Data()
+    // Built as a zip below.
+    buf = makeSalonZip()
+    return buf
+}
+
+private func makeSalonZip() -> Data {
+    let root = """
+    #usda 1.0
+    (
+        defaultPrim = "Scan"
+        metersPerUnit = 1
+        upAxis = "Y"
+    )
+
+    def Xform "Scan" (
+        kind = "assembly"
+    )
+    {
+        def Xform "Section_grp" ( kind = "group" )
+        {
+            def Xform "livingRoom0" ( kind = "assembly" ) { }
+        }
+        def Xform "Mesh_grp" ( kind = "group" )
+        {
+            def Xform "Floor_grp" (
+                kind = "group"
+                prepend references = @./assets/Mesh/Floors/Floor0.usda@
+            ) { }
+            def Xform "Object_grp" ( kind = "group" )
+            {
+                def Xform "Fireplace_grp" (
+                    kind = "group"
+                    prepend references = @./assets/Mesh/Fireplace/Fireplace0.usda@
+                ) { }
+            }
+            def Xform "Arch_grp" ( kind = "group" )
+            {
+                def Xform "Wall_0_grp" (
+                    kind = "group"
+                    prepend references = @./assets/Mesh/Walls/Wall0/Door0.usda@
+                ) { }
+                def Xform "Wall_1_grp" (
+                    kind = "group"
+                    prepend references = @./assets/Mesh/Walls/Wall1/Window0.usda@
+                ) { }
+            }
+        }
+    }
+    """
+    let floorPoints = "(0, 0, 0), (4, 0, 0), (4, 3, 0), (0, 3, 0), (0, 0, -0.16), (4, 0, -0.16), (4, 3, -0.16), (0, 3, -0.16)"
+    let floor = usdaMesh(
+        name: "Floor0",
+        category: "Floor",
+        points: floorPoints,
+        counts: "3, 3, 3, 3",
+        indices: "0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6",
+        matrix: "( (1, 0, 0, 0), (0, 0, 1, 0), (0, 1, 0, 0), (0, 0, 0, 1) )"
+    )
+    return zipData([
+        "Scan.usda": Data(root.utf8),
+        "assets/Mesh/Floors/Floor0.usda": Data(floor.utf8),
+        "assets/Mesh/Fireplace/Fireplace0.usda": Data(boxUsda(name: "Fireplace0", category: "Fireplace", hx: 0.3, hy: 0.5, hz: 0.4, tx: 1.0, ty: 0.5, tz: 1.5).utf8),
+        "assets/Mesh/Walls/Wall0/Door0.usda": Data(boxUsda(name: "Door0", category: "Door(Isopen: False)", hx: 0.45, hy: 1.0, hz: 0.04, tx: 2.0, ty: 1.0, tz: 0.04).utf8),
+        "assets/Mesh/Walls/Wall1/Window0.usda": Data(boxUsda(name: "Window0", category: "Window", hx: 0.5, hy: 0.6, hz: 0.04, tx: 2.0, ty: 1.0, tz: 0.0).utf8),
+    ])
+}
+
+private func usdaMesh(name: String, category: String, points: String, counts: String, indices: String, matrix: String) -> String {
+    """
+    #usda 1.0
+    (
+        defaultPrim = "\(name)"
+        metersPerUnit = 1
+        upAxis = "Y"
+    )
+
+    def Xform "\(name)" (
+        customData = {
+            string Category = "\(category)"
+            string UUID = "00000000-0000-0000-0000-000000000000"
+        }
+        kind = "component"
+    )
+    {
+        def Mesh "\(name)"
+        {
+            int[] faceVertexCounts = [\(counts)]
+            int[] faceVertexIndices = [\(indices)]
+            point3f[] points = [\(points)]
+            matrix4d xformOp:transform = \(matrix)
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+    }
+    """
+}
+
+private func boxUsda(name: String, category: String, hx: Double, hy: Double, hz: Double, tx: Double, ty: Double, tz: Double) -> String {
+    let points = "(\(-hx), \(-hy), \(-hz)), (\(hx), \(-hy), \(-hz)), (\(hx), \(hy), \(-hz)), (\(-hx), \(hy), \(-hz)), (\(-hx), \(-hy), \(hz)), (\(hx), \(-hy), \(hz)), (\(hx), \(hy), \(hz)), (\(-hx), \(hy), \(hz))"
+    return usdaMesh(
+        name: name,
+        category: category,
+        points: points,
+        counts: "3, 3",
+        indices: "0, 1, 2, 0, 2, 3",
+        matrix: "( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (\(tx), \(ty), \(tz), 1) )"
+    )
+}
+
+private func zipData(_ files: [String: Data]) -> Data {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    for (name, data) in files {
+        let url = dir.appendingPathComponent(name)
+        try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try! data.write(to: url)
+    }
+    let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+    task.arguments = ["-c", "-k", "--keepParent", dir.path, zipURL.path]
+    // ditto --keepParent wraps the folder; use zip instead.
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+    task.currentDirectoryURL = dir
+    task.arguments = ["-r", "-q", zipURL.path, "."]
+    try! task.run()
+    task.waitUntilExit()
+    return try! Data(contentsOf: zipURL)
+}

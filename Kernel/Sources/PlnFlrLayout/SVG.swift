@@ -38,6 +38,9 @@ public func planToSvg(_ plan: LayoutPlan, maxPx: Int = 900) -> String {
             "<line class=\"pln-divider\" x1=\"\(divider.0.xMm)\" y1=\"\(divider.0.yMm)\" x2=\"\(divider.1.xMm)\" y2=\"\(divider.1.yMm)\" />"
         )
     }
+    for strip in plan.thresholds {
+        extras.append("<path class=\"pln-threshold\" d=\"\(path(strip.geometry))\" />")
+    }
     for window in plan.windows {
         extras.append(
             "<line class=\"pln-window\" x1=\"\(window.start.xMm)\" y1=\"\(window.start.yMm)\" x2=\"\(window.end.xMm)\" y2=\"\(window.end.yMm)\" />"

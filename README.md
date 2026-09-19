@@ -2,17 +2,16 @@
 
 Plan ułożenia podłogi. Z obrysu pomieszczenia (prostokąt, L, dowolny wielokąt z otworami) i wymiaru deski albo kafelka liczy dylatację, siatkę, docinki, BOM i pokazuje całą instalację.
 
-Stack: FastAPI + Jinja + HTMX + Alpine + Basecoat via the platform BOM: [`app-factory`](https://github.com/mikolaj92/app-factory) `v0.7.3`, [`my-auth`](https://github.com/mikolaj92/my-auth) `v0.5.6`, and [`my-usermanager`](https://github.com/mikolaj92/my-usermanager) `v0.6.7`.
+Stack: Vapor 5 (`5.0.0-beta.2`) + HTMX + Alpine + Basecoat (app-factory v0.7.3 assets in `Web/Public`). Kernel: `PlnFlrLayout`. Capture: TCA26.
 
 ## Run
 
 ```bash
-uv sync --group dev
-uv run plnflr
+swift test --package-path Kernel
+swift test --package-path Web
+swift run --package-path Web PlnFlrServe --port 8004 --hostname 0.0.0.0
 # http://127.0.0.1:8004
 # live: https://plnflr.patryk.it
-uv run pytest
-swift test --package-path Kernel
 swift test --package-path App
 swift run --package-path App PlnFlrApp
 ```

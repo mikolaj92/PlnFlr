@@ -143,6 +143,20 @@ public struct Opening: Equatable, Hashable, Sendable {
     }
 }
 
+public struct Threshold: Equatable, Hashable, Sendable {
+    public var geometry: Ring
+    public var label: String
+    public var lengthMm: Int
+    public var widthMm: Int
+
+    public init(label: String, lengthMm: Int, widthMm: Int, geometry: Ring) {
+        self.geometry = geometry
+        self.label = label
+        self.lengthMm = lengthMm
+        self.widthMm = widthMm
+    }
+}
+
 public enum PieceKind: String, Equatable, Sendable {
     case clip
     case endCut = "end_cut"
@@ -217,6 +231,7 @@ public struct LayoutPlan: Sendable {
     public var rowsInstructionPl: [String]
     public var splitAtMm: Int?
     public var splitAxis: SplitAxis?
+    public var thresholds: [Threshold] = []
     public var warnings: [Warning]
     public var windows: [Opening]
 }
@@ -235,6 +250,7 @@ extension LayoutPlan: Equatable {
             && lhs.rowsInstructionPl == rhs.rowsInstructionPl
             && lhs.splitAtMm == rhs.splitAtMm
             && lhs.splitAxis == rhs.splitAxis
+            && lhs.thresholds == rhs.thresholds
             && lhs.warnings == rhs.warnings
             && lhs.windows == rhs.windows
             && optionalPairEqual(lhs.divider, rhs.divider)
