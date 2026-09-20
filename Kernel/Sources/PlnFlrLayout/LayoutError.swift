@@ -6,6 +6,7 @@ public enum LayoutError: Error, Equatable, Sendable, LocalizedError {
     case expansionMustBeNonNegative
     case invalidExpansionRate
     case invalidMetres
+    case joinRoomsMustTouch
     case lShapeDimensionsMustBePositive
     case metresMustBeNonNegative
     case metresMustBePositive
@@ -25,6 +26,7 @@ public enum LayoutError: Error, Equatable, Sendable, LocalizedError {
         case .expansionMustBeNonNegative: "expansion must be >= 0"
         case .invalidExpansionRate: "invalid expansion rate"
         case .invalidMetres: "invalid metres"
+        case .joinRoomsMustTouch: "rooms must share an edge to join"
         case .lShapeDimensionsMustBePositive: "L dimensions must be positive"
         case .metresMustBeNonNegative: "metres must be non-negative"
         case .metresMustBePositive: "metres must be positive"

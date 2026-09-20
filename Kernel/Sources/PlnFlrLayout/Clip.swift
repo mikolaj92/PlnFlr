@@ -97,7 +97,7 @@ func offsetOrthogonal(_ vertices: [Vertex], delta: Int) throws -> [Vertex] {
     return normalizeRing(out)
 }
 
-fileprivate func orthogonalRects(_ vertices: [Vertex]) -> [AABB] {
+func orthogonalRects(_ vertices: [Vertex]) -> [AABB] {
     let points = normalizeRing(vertices)
     guard isOrthogonal(points) else { return [] }
     let ys = Array(Set(points.map(\.yMm))).sorted()
@@ -136,7 +136,7 @@ public func validateRoom(outer: [Vertex], holes: [[Vertex]]) throws {
     _ = holes // ponytail: hole topology needs Clipper; bowtie is area-zero
 }
 
-fileprivate struct AABB {
+struct AABB {
     var minX: Int
     var minY: Int
     var maxX: Int
@@ -316,6 +316,88 @@ private func lineIntersection(_ a: Vertex, _ b: Vertex, _ c: Vertex, _ d: Vertex
     let px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den
     let py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den
     return Vertex(Int(px.rounded()), Int(py.rounded()))
+}
+
+public func joinRooms(_ a: Room, _ b: Room) throws -> Room {
+    let rects = orthogonalRects(a.outer.vertices) + orthogonalRects(b.outer.vertices)
+    guard rects.count >= 2, rectsShareBoundary(rects) else {
+        throw LayoutError.joinRoomsMustTouch
+    }
+    return Room(try Ring(unionOrthogonalRects(rects)), holes: a.holes + b.holes)
+}
+
+private func rectsShareBoundary(_ rects: [AABB]) -> Bool {
+    for i in rects.indices {
+        for j in rects.indices where j > i {
+            if shareEdgeOrOverlap(rects[i], rects[j]) { return true }
+        }
+    }
+    return false
+}
+
+private func shareEdgeOrOverlap(_ a: AABB, _ b: AABB) -> Bool {
+    if a.intersection(b) != nil { return true }
+    let yOverlap = min(a.maxY, b.maxY) > max(a.minY, b.minY)
+    let xOverlap = min(a.maxX, b.maxX) > max(a.minX, b.minX)
+    if a.maxX == b.minX || b.maxX == a.minX { return yOverlap }
+    if a.maxY == b.minY || b.maxY == a.minY { return xOverlap }
+    return false
+}
+
+private func unionOrthogonalRects(_ rects: [AABB]) -> [Vertex] {
+    let xs = Array(Set(rects.flatMap { [$0.minX, $0.maxX] })).sorted()
+    let ys = Array(Set(rects.flatMap { [$0.minY, $0.maxY] })).sorted()
+    guard xs.count >= 2, ys.count >= 2 else { return [] }
+    var covered = Array(
+        repeating: Array(repeating: false, count: ys.count - 1),
+        count: xs.count - 1
+    )
+    for box in rects {
+        for i in 0..<(xs.count - 1) {
+            for j in 0..<(ys.count - 1) where box.minX <= xs[i] && box.maxX >= xs[i + 1]
+                && box.minY <= ys[j] && box.maxY >= ys[j + 1]
+            {
+                covered[i][j] = true
+            }
+        }
+    }
+    var outgoing: [Vertex: [Vertex]] = [:]
+    func add(_ from: Vertex, _ to: Vertex) {
+        outgoing[from, default: []].append(to)
+    }
+    for i in 0..<(xs.count - 1) {
+        for j in 0..<(ys.count - 1) where covered[i][j] {
+            if j == 0 || !covered[i][j - 1] {
+                add(Vertex(xs[i], ys[j]), Vertex(xs[i + 1], ys[j]))
+            }
+            if i == xs.count - 2 || !covered[i + 1][j] {
+                add(Vertex(xs[i + 1], ys[j]), Vertex(xs[i + 1], ys[j + 1]))
+            }
+            if j == ys.count - 2 || !covered[i][j + 1] {
+                add(Vertex(xs[i + 1], ys[j + 1]), Vertex(xs[i], ys[j + 1]))
+            }
+            if i == 0 || !covered[i - 1][j] {
+                add(Vertex(xs[i], ys[j + 1]), Vertex(xs[i], ys[j]))
+            }
+        }
+    }
+    guard let start = outgoing.keys.min(by: { a, b in
+        if a.xMm != b.xMm { return a.xMm < b.xMm }
+        return a.yMm < b.yMm
+    }) else { return [] }
+    var ring: [Vertex] = [start]
+    var current = start
+    var previous = start
+    repeat {
+        let nexts = outgoing[current] ?? []
+        let nxt = nexts.first { $0 != previous } ?? nexts[0]
+        if nxt == start { break }
+        ring.append(nxt)
+        previous = current
+        current = nxt
+        if ring.count > xs.count * ys.count * 4 { break }
+    } while current != start
+    return normalizeRing(ring)
 }
 
 public func insetRoom(_ room: Room, gapMm: Int) throws -> Room {

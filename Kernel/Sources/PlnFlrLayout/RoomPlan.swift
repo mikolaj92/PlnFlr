@@ -1,14 +1,47 @@
 import Foundation
 
-public struct CapturedScan: Sendable {
+public struct CapturedRoom: Equatable, Sendable {
     public var name: String
     public var room: Room
     public var thresholds: [Threshold]
-    public var verticesM: String
-    public var holeRectangles: String
-    public var doorVertices: String
     public var windows: [Opening]
-    public var windowSegments: String
+
+    public init(name: String, room: Room, thresholds: [Threshold], windows: [Opening]) {
+        self.name = name
+        self.room = room
+        self.thresholds = thresholds
+        self.windows = windows
+    }
+}
+
+public struct CapturedScan: Equatable, Sendable {
+    public var rooms: [CapturedRoom]
+
+    public init(rooms: [CapturedRoom]) {
+        self.rooms = rooms
+    }
+
+    public var name: String { rooms.first?.name ?? "Pokój" }
+    public var room: Room { rooms[0].room }
+    public var thresholds: [Threshold] { rooms.flatMap(\.thresholds) }
+    public var windows: [Opening] { rooms.flatMap(\.windows) }
+    public var verticesM: String {
+        rooms.first.map { ringToVerticesM($0.room.outer) } ?? ""
+    }
+    public var holeRectangles: String {
+        guard let first = rooms.first else { return "" }
+        let doors = Set(first.thresholds.map { ringToVerticesM($0.geometry) })
+        return first.room.holes
+            .filter { !doors.contains(ringToVerticesM($0)) }
+            .map(ringToRectM)
+            .joined(separator: "\n")
+    }
+    public var doorVertices: String {
+        rooms.first?.thresholds.map { ringToVerticesM($0.geometry) }.joined(separator: "\n\n") ?? ""
+    }
+    public var windowSegments: String {
+        rooms.first?.windows.map(openingToSegmentM).joined(separator: "\n") ?? ""
+    }
 }
 
 private let thresholdMm = 80
@@ -32,60 +65,94 @@ public func roomFromUsdz(_ payload: Data) throws -> CapturedScan {
     guard names.contains("Scan.usda") || names.contains("./Scan.usda") else {
         throw ScanError.notRoomPlan
     }
-    let floors = names.filter { $0.contains("/Floors/Floor") && $0.hasSuffix(".usda") }
-    guard let floorName = floors.first, let floorData = archive[floorName],
-          let floorText = String(data: floorData, encoding: .utf8)
-    else { throw ScanError.missingFloor }
-    let floor = try parseUsdaMesh(floorText, name: "Floor")
-    let outlineM = try floorOutlineM(floor)
+    let floors = names.filter { $0.contains("/Floors/Floor") && $0.hasSuffix(".usda") }.sorted()
+    guard !floors.isEmpty else { throw ScanError.missingFloor }
+    var outlinesM: [[(Double, Double)]] = []
+    for floorName in floors {
+        guard let floorData = archive[floorName], let floorText = String(data: floorData, encoding: .utf8)
+        else { throw ScanError.missingFloor }
+        let mesh = try parseUsdaMesh(floorText, name: floorName)
+        outlinesM.append(try floorOutlineM(mesh))
+    }
     let origin = (
-        outlineM.map(\.0).min() ?? 0,
-        outlineM.map(\.1).min() ?? 0
+        outlinesM.flatMap { $0.map(\.0) }.min() ?? 0,
+        outlinesM.flatMap { $0.map(\.1) }.min() ?? 0
     )
-    let outer = try ringMm(outlineM, origin: origin)
+    let floorsMm = try outlinesM.map { try ringMm($0, origin: origin) }
     var fireplaces: [Ring] = []
-    var fireplaceRects: [String] = []
     var thresholds: [Threshold] = []
-    var doorPolys: [String] = []
     var windows: [Opening] = []
     for name in names {
         guard name.hasSuffix(".usda"), name.contains("/Mesh/") else { continue }
+        if name.contains("/Floors/Floor") { continue }
         guard let bytes = archive[name], let text = String(data: bytes, encoding: .utf8) else { continue }
         let leaf = name.split(separator: "/").last.map { String($0.replacingOccurrences(of: ".usda", with: "")) } ?? name
         let mesh = try parseUsdaMesh(text, name: leaf)
         let category = mesh.category.lowercased()
         if category.hasPrefix("fireplace") {
-            let (ring, rect) = try boxRing(mesh, origin: origin)
-            fireplaces.append(ring)
-            fireplaceRects.append(rect)
+            fireplaces.append(try boxRing(mesh, origin: origin).0)
         } else if category.hasPrefix("door") {
-            let threshold = try doorThreshold(mesh, origin: origin)
-            thresholds.append(threshold)
-            doorPolys.append(ringToVerticesM(threshold.geometry))
+            thresholds.append(try doorThreshold(mesh, origin: origin))
         } else if category.hasPrefix("window") {
             windows.append(try windowOpening(mesh, origin: origin))
         }
     }
-    let holes = fireplaces + thresholds.map(\.geometry)
     let scanText = String(data: archive["Scan.usda"] ?? archive["./Scan.usda"] ?? Data(), encoding: .utf8) ?? ""
-    return CapturedScan(
-        name: roomName(scanText),
-        room: Room(outer, holes: holes),
-        thresholds: thresholds,
-        verticesM: ringToVerticesM(outer),
-        holeRectangles: fireplaceRects.joined(separator: "\n"),
-        doorVertices: doorPolys.joined(separator: "\n\n"),
-        windows: windows,
-        windowSegments: windows.map(openingToSegmentM).joined(separator: "\n")
-    )
+    let labels = roomLabels(scanText, count: floorsMm.count)
+    var rooms: [CapturedRoom] = []
+    for (index, floor) in floorsMm.enumerated() {
+        let roomFire = fireplaces.filter { featureTouches($0, floor) }
+        let roomDoors = thresholds.filter { featureTouches($0.geometry, floor) }
+        let roomWindows = windows.filter { windowTouches($0, floor) }
+        rooms.append(
+            CapturedRoom(
+                name: labels[index],
+                room: Room(floor, holes: roomFire + roomDoors.map(\.geometry)),
+                thresholds: roomDoors,
+                windows: roomWindows
+            )
+        )
+    }
+    return CapturedScan(rooms: rooms)
 }
 
-private func roomName(_ root: String) -> String {
-    let lower = root.lowercased()
-    for (key, label) in roomNames where lower.contains("\(key)0") {
-        return label
+private func roomLabels(_ root: String, count: Int) -> [String] {
+    let pattern = try! NSRegularExpression(pattern: #"def Xform \"([^\"]+)\""#)
+    let ns = root as NSString
+    let order = ["livingroom", "bedroom", "bathroom", "kitchen", "diningroom"]
+    var found: [String] = []
+    for match in pattern.matches(in: root, range: NSRange(location: 0, length: ns.length)) {
+        let raw = ns.substring(with: match.range(at: 1)).lowercased()
+        for key in order where raw.contains(key) {
+            found.append(roomNames[key]!)
+            break
+        }
     }
-    return "Pokój"
+    if found.isEmpty {
+        return (0..<count).map { $0 == 0 ? "Pokój" : "Pokój \($0 + 1)" }
+    }
+    while found.count < count {
+        found.append("Pokój \(found.count + 1)")
+    }
+    return Array(found.prefix(count))
+}
+
+private func featureTouches(_ feature: Ring, _ floor: Ring) -> Bool {
+    let box = bbox(Room(floor))
+    let xs = feature.vertices.map(\.xMm)
+    let ys = feature.vertices.map(\.yMm)
+    let minX = xs.min() ?? 0, maxX = xs.max() ?? 0
+    let minY = ys.min() ?? 0, maxY = ys.max() ?? 0
+    return maxX >= box.minX && minX <= box.maxX && maxY >= box.minY && minY <= box.maxY
+}
+
+private func windowTouches(_ opening: Opening, _ floor: Ring) -> Bool {
+    let box = bbox(Room(floor))
+    let minX = min(opening.start.xMm, opening.end.xMm)
+    let maxX = max(opening.start.xMm, opening.end.xMm)
+    let minY = min(opening.start.yMm, opening.end.yMm)
+    let maxY = max(opening.start.yMm, opening.end.yMm)
+    return maxX >= box.minX && minX <= box.maxX && maxY >= box.minY && minY <= box.maxY
 }
 
 private func floorOutlineM(_ floor: UsdaMesh) throws -> [(Double, Double)] {
