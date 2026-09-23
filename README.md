@@ -13,7 +13,13 @@ Kolejność rozwoju produktu:
 3. **Instalacje** — rozmieszczanie, planowanie i dokumentowanie instalacji wodnych, kanalizacyjnych, elektrycznych, powietrznych, wentylacyjnych i innych.
 4. **Możliwe późniejsze rozszerzenie: meblowanie domu** — rozmieszczanie mebli i wyposażenia na tej samej mapie. To pomysł na dalszy rozwój, nie zobowiązanie obecnego zakresu.
 
-Ta kolejność określa priorytety dalszych prac. Istniejący kod planowania podłóg nie oznacza, że etap skanowania całego domu jest już domknięty.
+Bieżący zakres prac obejmuje **1 i 2: skany domu i pomieszczeń, następnie podłogi**. Instalacje i ewentualne meblowanie pozostają na później. Istniejący kod planowania podłóg nie oznacza, że etap skanowania całego domu jest już domknięty.
+
+### Instalacje — jeden prosty mechanizm na później
+
+Instalację przedstawiamy jako linie lub łamane o zadanej średnicy w milimetrach, na wspólnej mapie domu. Instalacje rozróżniamy nazwą i kolorem: n kolorów może oznaczać n instalacji. Dodanie kolejnej instalacji to kolejne dane, nie osobny silnik ani moduł branżowy. Jeden edytor przebiegu i średnicy ma obsługiwać wszystkie te warstwy.
+
+To model do rozmieszczania i dokumentowania tras, nie deklaracja obliczeń hydraulicznych, elektrycznych czy wentylacyjnych. Na tym etapie nie budujemy takich obliczeń ani katalogów branżowych.
 
 To warstwy jednego projektu domu, powiązane ze wspólną przestrzenią, nie osobne, niepowiązane plany. Stan istniejący i wykonany powinien być odróżnialny od zamierzeń. Skan jest źródłem geometrii — nie oznacza automatycznego rozpoznania ukrytych instalacji.
 
