@@ -8,7 +8,12 @@ struct WelcomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Image(systemName: "square.grid.3x3.square").font(.system(size: 48)).foregroundStyle(.orange)
-                Text("Zaplanuj swoją podłogę").font(.largeTitle.bold())
+                Text("Zbuduj mapę swojego domu").font(.largeTitle.bold())
+                #if os(iOS)
+                Button("Skanuj pokój", systemImage: "camera.viewfinder") { store.send(.scanRoomButtonTapped) }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("startRoomCapture")
+                #endif
                 Text("Od obrysu pokoju do układu desek, docinek i liczby paczek.").foregroundStyle(.secondary)
                 Label("1. Wgraj skan RoomPlan USDZ lub podaj wymiary", systemImage: "house")
                 Label("2. Wybierz pokój i materiał", systemImage: "square.stack")

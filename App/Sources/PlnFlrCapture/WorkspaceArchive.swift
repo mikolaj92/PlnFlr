@@ -33,7 +33,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         init(_ state: Workspace.Project.State) {
             id = state.id
             name = state.name
-            scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms) }
+            scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON) }
             floors = state.floors.map(FloorRecord.init)
             selectedFloorIDs = state.selectedFloorIDs
             splitAtM = state.splitAtM
@@ -41,7 +41,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         }
 
         var state: Workspace.Project.State {
-            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms) },
+            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON) },
                   floors: floors.map(\.state), selectedFloorIDs: selectedFloorIDs,
                   splitAtM: splitAtM, splitAxis: splitAxis)
         }
@@ -51,6 +51,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var id: UUID
         var label: String
         var rooms: [CapturedRoom]
+        var roomPlanJSON: Data?
     }
 
     public struct FloorRecord: Codable, Equatable, Sendable {

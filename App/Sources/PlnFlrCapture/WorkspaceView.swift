@@ -21,6 +21,9 @@ public struct WorkspaceView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
+                    #if os(iOS)
+                    Button("Skanuj pokój", systemImage: "camera.viewfinder") { store.send(.scanRoomButtonTapped) }
+                    #endif
                     Button("Nowy projekt", systemImage: "folder.badge.plus") { store.send(.newProjectButtonTapped) }
                     Button("Dodaj pokój", systemImage: "rectangle.badge.plus") { $store.isAddingRoom.wrappedValue = true }
                     Button("Importuj USDZ", systemImage: "square.and.arrow.down") { $store.isImporting.wrappedValue = true }
@@ -47,6 +50,16 @@ public struct WorkspaceView: View {
                 .background(.regularMaterial)
             }
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $store.isCapturingRoom) {
+            RoomScannerView(
+                onSave: { store.send(.roomCaptureFinished($0)) },
+                onCancel: { store.send(.roomCaptureCancelled) },
+                onFailure: { store.send(.roomCaptureFailed($0)) }
+            )
+            .interactiveDismissDisabled()
+        }
+        #endif
         .sheet(isPresented: $store.isAddingRoom) { ManualRoomView(store: store) }
         .sheet(isPresented: $store.isPaywallPresented) { ProView(store: store) }
         .fileImporter(isPresented: $store.isImporting, allowedContentTypes: [.usdz], onCompletion: importUsdz)
@@ -92,6 +105,9 @@ public struct WorkspaceView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
                     if project.floors.isEmpty {
+                        if !project.scans.isEmpty {
+                            Label("Zapisane skany: \(project.scans.count). Skany z aparatu zachowują pełny model RoomPlan; podłogi nie zostały jeszcze wyprowadzone.", systemImage: "checkmark.circle")
+                        }
                         WelcomeView(store: store)
                     } else {
                         HouseCanvas(floors: project.floors, selectedID: project.selectedFloorIDs.first)
@@ -183,7 +199,8 @@ private struct ScanRowView: View {
     var body: some View {
         VStack(alignment: .leading) {
             TextField("Nazwa skanu", text: $store.label)
-            Text("Powierzchnie: \(store.rooms.count)").font(.caption).foregroundStyle(.secondary)
+            Text(store.roomPlanJSON == nil ? "Powierzchnie: \(store.rooms.count)" : "Pełny skan RoomPlan zapisany")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

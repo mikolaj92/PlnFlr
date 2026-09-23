@@ -12,11 +12,14 @@ public struct Workspace {
             public var label: String
             public var rooms: [CapturedRoom]
             public var scanID: UUID
+            /// Full Apple CapturedRoom encoding, independent of derived floor geometry.
+            public var roomPlanJSON: Data?
 
-            public init(id: UUID, label: String, rooms: [CapturedRoom]) {
+            public init(id: UUID, label: String, rooms: [CapturedRoom], roomPlanJSON: Data? = nil) {
                 self.label = label
                 self.rooms = rooms
                 self.scanID = id
+                self.roomPlanJSON = roomPlanJSON
             }
         }
 
@@ -133,6 +136,7 @@ public struct Workspace {
     }
 
     public struct State {
+        public var isCapturingRoom = false
         public var isPurchasing = false
         public var purchaseMessage: String?
         public var proProduct: ProProduct?
@@ -165,6 +169,10 @@ public struct Workspace {
     }
 
     public enum Action {
+        case scanRoomButtonTapped
+        case roomCaptureFinished(Data)
+        case roomCaptureCancelled
+        case roomCaptureFailed(String)
         case buyProButtonTapped
         case purchaseFinished(PurchaseOutcome)
         case purchaseFailed(String)
@@ -198,7 +206,8 @@ public struct Workspace {
         Update { state, action in
             if state.storageError != nil && !state.hasLoaded {
                 switch action {
-                case .addRoomButtonTapped, .importUsdz, .newProjectButtonTapped,
+                case .scanRoomButtonTapped, .roomCaptureFinished,
+                     .addRoomButtonTapped, .importUsdz, .newProjectButtonTapped,
                      .joinSelectedButtonTapped, .splitSelectedButtonTapped,
                      .planFloorButtonTapped, .projects:
                     return
@@ -206,6 +215,33 @@ public struct Workspace {
                 }
             }
             switch action {
+            case .scanRoomButtonTapped:
+                state.isCapturingRoom = true
+                state.error = nil
+            case .roomCaptureCancelled:
+                state.isCapturingRoom = false
+            case .roomCaptureFailed(let message):
+                guard state.isCapturingRoom else { return }
+                state.isCapturingRoom = false
+                state.error = message
+            case .roomCaptureFinished(let source):
+                guard state.isCapturingRoom else { return }
+                state.isCapturingRoom = false
+                guard !source.isEmpty else {
+                    state.error = "Skan jest pusty. Spróbuj ponownie."
+                    return
+                }
+                if state.selectedProjectIndex == nil {
+                    let project = Project.State(id: uuid(), name: "Projekt \(state.projects.count + 1)")
+                    state.projects.append(project)
+                    state.selectedProjectID = project.id
+                }
+                guard let index = state.selectedProjectIndex else { return }
+                state.projects[index].scans.append(Scan.State(
+                    id: uuid(), label: "Skan \(state.projects[index].scans.count + 1)",
+                    rooms: [], roomPlanJSON: source
+                ))
+                state.error = nil
             case .refreshAccess:
                 let client = purchases
                 store.addTask { try store.send(.proAccessChanged(await client.currentAccess())) }

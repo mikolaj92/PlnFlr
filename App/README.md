@@ -6,7 +6,9 @@ Bez kont PlnFlr, bez backendu kont, bez TestFlight. Projekty zapisują się na u
 
 PlnFlr ma być mapą domu budowaną razem z użytkownikiem, nie tylko kalkulatorem podłóg. Kolejność rozwoju: **skany całego domu i poszczególnych pomieszczeń → podłogi → instalacje wodne, kanalizacyjne, elektryczne, powietrzne, wentylacyjne i inne → ewentualnie meblowanie domu**. Wszystko na tej samej, stopniowo uzupełnianej mapie. Bieżącym priorytetem są skany; meblowanie pozostaje pomysłem na później. Kierunek produktu jest zapisany w [głównym README](../README.md#kierunek-produktu).
 
-Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Własny interfejs skanowania kamerą i pozostałe warstwy instalacji nie są jeszcze zaimplementowane.
+Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Na iOS jest także „Skanuj pokój”: interfejs Apple RoomPlan, zgoda na aparat, zakończenie skanu, podgląd i zapis pełnego modelu `CapturedRoom` jako JSON w projekcie. Wymaga urządzenia obsługującego RoomPlan/LiDAR. Na Macu pozostaje import USDZ.
+
+Skan z aparatu nie tworzy jeszcze podłóg: zachowujemy źródłowy model, bez zastępowania go przybliżonym prostokątem. Kolejne kroki to wspólna przestrzeń wielu pomieszczeń i wyprowadzenie geometrii podłóg. Osobne sesje skanowania nie są jeszcze składane w jedną mapę domu. Przepływ aparatu jest sprawdzony kompilacją iOS, ale nie został jeszcze zweryfikowany na fizycznym urządzeniu.
 
 ## Uruchomienie
 
@@ -29,14 +31,14 @@ Zwykłe otwarcie `.app` poza Xcode również nie włącza lokalnego sklepu.
 
 ## Przepływ
 
-1. Podaj wymiary prostokątnego pokoju albo zaimportuj USDZ RoomPlan (do 50 MB).
+1. Na iOS wybierz **Skanuj pokój**, zakończ skan i zatwierdź **Zapisz skan**. Ten przebieg zapisuje pełny model bez obliczania podłogi. Aby dziś przejść dalej do układania podłóg, podaj wymiary prostokątnego pokoju albo zaimportuj USDZ RoomPlan (do 50 MB).
 2. Wybierz pokój; ustaw deski/panele lub płytki, wymiary, paczkę, dylatację i fugę.
 3. Wybierz **Ułóż podłogę**. Zobacz mapę elementów, paczki, odpad, ostrzeżenia i kolejność układania.
 4. Pierwsze udane obliczenie przypisuje bezpłatny dostęp do tego pokoju. Import wielu pomieszczeń nie jest blokowany. Błędne obliczenie nie wykorzystuje darmowego pokoju.
 5. Kolejne pokoje pokazują Pro. Ponowne obliczenia i techniczne podziały bezpłatnego pokoju zachowują dostęp. Łączenie odrębnych pokoi tworzy nową powierzchnię, nie przenosi darmowego uprawnienia na dodatkowe pokoje.
 6. Po ponownym uruchomieniu wracają projekty, skany, powierzchnie, ustawienia i wybór darmowego pokoju. Podgląd jest wynikiem obliczeń: użyj ponownie **Ułóż podłogę**.
 
-Lokalny limit to 20 000 oszacowanych elementów na plan; bardzo duże siatki są odrzucane przed alokacją. Ręczny obrys jest obecnie prostokątny. To import istniejących skanów, nie nowy interfejs skanowania kamerą.
+Lokalny limit to 20 000 oszacowanych elementów na plan; bardzo duże siatki są odrzucane przed alokacją. Ręczny obrys jest obecnie prostokątny. Import USDZ i zapis z aparatu są odrębnymi ścieżkami; tylko import USDZ wyprowadza obecnie powierzchnie robocze.
 
 ## Dane i błędy zapisu
 

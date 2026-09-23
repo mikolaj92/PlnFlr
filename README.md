@@ -23,7 +23,7 @@ To model do rozmieszczania i dokumentowania tras, nie deklaracja obliczeń hydra
 
 To warstwy jednego projektu domu, powiązane ze wspólną przestrzenią, nie osobne, niepowiązane plany. Stan istniejący i wykonany powinien być odróżnialny od zamierzeń. Skan jest źródłem geometrii — nie oznacza automatycznego rozpoznania ukrytych instalacji.
 
-**Stan obecny:** aplikacja natywna importuje istniejące skany RoomPlan USDZ albo przyjmuje wymiary prostokątnego pokoju, zapisuje projekty lokalnie i planuje podłogi. Nie ma jeszcze własnego interfejsu skanowania kamerą ani edytorów pozostałych instalacji. Powyższy kierunek nie jest listą już dostarczonych funkcji.
+**Stan obecny:** aplikacja natywna importuje istniejące skany RoomPlan USDZ albo przyjmuje wymiary prostokątnego pokoju, zapisuje projekty lokalnie i planuje podłogi. Na iOS dodano skanowanie pojedynczego pokoju przez interfejs Apple RoomPlan oraz zapis pełnego modelu źródłowego. Ta ścieżka jest sprawdzona kompilacją, nie skanem na fizycznym urządzeniu; nie wyprowadza jeszcze podłóg ani nie składa osobnych sesji w mapę domu. Nie ma jeszcze edytorów pozostałych instalacji. Powyższy kierunek nie jest listą już dostarczonych funkcji.
 
 Obecne drzewo `Workspace → Project → Scan + Floor` opisuje aktualną implementację, nie kolejność rozwoju produktu. `Project` jest miejscem dalszego rozwoju mapy domu; przyszłe instalacje nie powinny być modelowane jako rodzaje podłogi. Nie dodajemy teraz pustych modułów ani nowego schematu danych na zapas.
 

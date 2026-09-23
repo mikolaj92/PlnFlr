@@ -213,6 +213,7 @@
 		15740A6EC5C8784D868F6040 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				INFOPLIST_KEY_NSCameraUsageDescription = "Aparat służy do skanowania pomieszczeń i budowania mapy domu. Skany zapisujemy na urządzeniu.";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -306,6 +307,7 @@
 		8CA2553013DD96302604F5BA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				INFOPLIST_KEY_NSCameraUsageDescription = "Aparat służy do skanowania pomieszczeń i budowania mapy domu. Skany zapisujemy na urządzeniu.";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
