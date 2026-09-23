@@ -16,10 +16,9 @@ struct FloorCanvas: View {
                     y: size.height - CGFloat(v.yMm - bounds.minY) * scale
                 )
             }
-            context.fill(path(plan.room.outer.vertices, point), with: .color(.secondary.opacity(0.15)))
-            for hole in plan.room.holes {
-                context.fill(path(hole.vertices, point), with: .color(.white))
-            }
+            var outline = path(plan.room.outer.vertices, point)
+            for hole in plan.room.holes { outline.addPath(path(hole.vertices, point)) }
+            context.fill(outline, with: .color(.secondary.opacity(0.15)), style: FillStyle(eoFill: true))
             for piece in plan.pieces {
                 let color: Color = piece.rowIndex.isMultiple(of: 2)
                     ? Color.orange.opacity(0.55)

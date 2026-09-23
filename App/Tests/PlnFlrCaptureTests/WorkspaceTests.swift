@@ -90,8 +90,8 @@ import Testing
     let (left, right) = try splitRoom(room, axis: .x, atMm: 1500)
     await store.send(.splitSelectedButtonTapped) {
         $0.projects[0].floors = [
-            snap(Workspace.Floor.State(id: leftID, name: "Salon A", room: left!)),
-            snap(Workspace.Floor.State(id: rightID, name: "Salon B", room: right!)),
+            snap(Workspace.Floor.State(id: leftID, name: "Salon A", room: left!, accessID: originalID)),
+            snap(Workspace.Floor.State(id: rightID, name: "Salon B", room: right!, accessID: originalID)),
         ]
         $0.projects[0].selectedFloorIDs = [leftID]
     }
@@ -146,17 +146,12 @@ import Testing
         zones: [Zone(kind: .plank, plank: spec)],
         rules: LayoutRules(expansionMm: 10)
     )
-    let store = await TestStoreActor(
-        initialState: Workspace.Floor.State(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            name: "Salon",
-            room: room
-        )
-    ) {
-        Workspace.Floor()
-    }
-    await store.send(.layButtonTapped) {
-        $0.plan = expected
+    let floor = Workspace.Floor.State(id: UUID(), name: "Salon", room: room)
+    let project = Workspace.Project.State(id: UUID(), name: "Dom", floors: [floor])
+    let store = await TestStoreActor(initialState: Workspace.State(projects: [project])) { Workspace() }
+    await store.send(.planFloorButtonTapped(project.id, floor.id)) {
+        $0.projects[0].floors[0].plan = expected
+        $0.freeRoomID = floor.id
     }
 }
 
