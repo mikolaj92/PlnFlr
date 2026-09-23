@@ -1,6 +1,28 @@
 # PlnFlr
 
-Plan ułożenia podłogi. Z obrysu pomieszczenia (prostokąt, L, dowolny wielokąt z otworami) i wymiaru deski albo kafelka liczy dylatację, siatkę, docinki, BOM i pokazuje całą instalację.
+Mapa naszego domu, budowana razem z nami — od skanów i pomiarów, przez planowanie prac, po dokumentowanie tego, co zostało wykonane. Podłogi są pierwszym zastosowaniem, nie granicą produktu.
+
+## Kierunek produktu
+
+Punktem wyjścia jest skanowanie i poznawanie przestrzeni domu. Mapa ma być stopniowo uzupełniana i poprawiana przez użytkownika w trakcie budowy, remontu i użytkowania, a nie być jednorazowym wynikiem skanu.
+
+Na tej samej mapie docelowo będziemy rozmieszczać, planować i dokumentować:
+
+- podłogi i inne elementy wykończenia;
+- instalacje wodne i kanalizacyjne;
+- instalacje elektryczne;
+- instalacje powietrzne i wentylacyjne;
+- kolejne rodzaje instalacji i wyposażenia, w miarę potrzeb.
+
+To warstwy jednego projektu domu, powiązane ze wspólną przestrzenią, nie osobne, niepowiązane plany. Stan istniejący i wykonany powinien być odróżnialny od zamierzeń. Skan jest źródłem geometrii — nie oznacza automatycznego rozpoznania ukrytych instalacji.
+
+**Stan obecny:** aplikacja natywna importuje istniejące skany RoomPlan USDZ albo przyjmuje wymiary prostokątnego pokoju, zapisuje projekty lokalnie i planuje podłogi. Nie ma jeszcze własnego interfejsu skanowania kamerą ani edytorów pozostałych instalacji. Powyższy kierunek nie jest listą już dostarczonych funkcji.
+
+Obecne drzewo `Workspace → Project → Scan + Floor` opisuje pierwszy etap. `Project` jest miejscem dalszego rozwoju mapy domu; przyszłe instalacje nie powinny być modelowane jako rodzaje podłogi. Nie dodajemy teraz pustych modułów ani nowego schematu danych na zapas.
+
+## Planowanie podłóg — pierwszy etap
+
+Z obrysu pomieszczenia (prostokąt, L, dowolny wielokąt z otworami) i wymiaru deski albo kafelka kernel liczy dylatację, siatkę, docinki, BOM i pokazuje cały układ podłogi.
 
 Stack: Vapor 5 (`5.0.0-beta.2`) + HTMX + Alpine + Basecoat (app-factory v0.7.3 assets in `Web/Public`). Kernel: `PlnFlrLayout`. Capture: TCA26.
 
