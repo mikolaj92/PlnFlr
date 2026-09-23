@@ -1,5 +1,5 @@
 /// Integer millimetre point. Coordinates are not lengths.
-public struct Vertex: Equatable, Hashable, Sendable {
+public struct Vertex: Codable, Equatable, Hashable, Sendable {
     public var xMm: Int
     public var yMm: Int
 

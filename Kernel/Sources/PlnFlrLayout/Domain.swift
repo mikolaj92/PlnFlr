@@ -1,4 +1,4 @@
-public struct Ring: Equatable, Hashable, Sendable {
+public struct Ring: Codable, Equatable, Hashable, Sendable {
     public var vertices: [Vertex]
 
     public init(_ vertices: [Vertex]) throws {
@@ -7,7 +7,7 @@ public struct Ring: Equatable, Hashable, Sendable {
     }
 }
 
-public struct Room: Equatable, Hashable, Sendable {
+public struct Room: Codable, Equatable, Hashable, Sendable {
     public var outer: Ring
     public var holes: [Ring]
 
@@ -35,7 +35,7 @@ public enum Axis: String, Equatable, Sendable {
     case alongY = "along_y"
 }
 
-public enum SplitAxis: String, Equatable, Hashable, Sendable {
+public enum SplitAxis: String, Codable, Equatable, Hashable, Sendable {
     case x
     case y
 }
@@ -131,7 +131,7 @@ public struct Zone: Equatable, Sendable {
     }
 }
 
-public struct Opening: Equatable, Hashable, Sendable {
+public struct Opening: Codable, Equatable, Hashable, Sendable {
     public var end: Vertex
     public var label: String
     public var start: Vertex
@@ -143,7 +143,7 @@ public struct Opening: Equatable, Hashable, Sendable {
     }
 }
 
-public struct Threshold: Equatable, Hashable, Sendable {
+public struct Threshold: Codable, Equatable, Hashable, Sendable {
     public var geometry: Ring
     public var label: String
     public var lengthMm: Int

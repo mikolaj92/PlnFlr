@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CapturedRoom: Equatable, Sendable {
+public struct CapturedRoom: Codable, Equatable, Sendable {
     public var name: String
     public var room: Room
     public var thresholds: [Threshold]
