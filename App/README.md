@@ -4,7 +4,7 @@ Bez kont PlnFlr, bez backendu kont, bez TestFlight. Projekty zapisują się na u
 
 ## Cel i obecny zakres
 
-PlnFlr ma być mapą domu budowaną razem z użytkownikiem, nie tylko kalkulatorem podłóg. Skanowanie i pomiary są punktem wyjścia; docelowo na wspólnej mapie dojdzie planowanie i dokumentowanie instalacji wodnych, kanalizacyjnych, elektrycznych, powietrznych, wentylacyjnych i innych. Kierunek produktu jest zapisany w [głównym README](../README.md#kierunek-produktu).
+PlnFlr ma być mapą domu budowaną razem z użytkownikiem, nie tylko kalkulatorem podłóg. Kolejność rozwoju: **skany całego domu i poszczególnych pomieszczeń → podłogi → instalacje wodne, kanalizacyjne, elektryczne, powietrzne, wentylacyjne i inne → ewentualnie meblowanie domu**. Wszystko na tej samej, stopniowo uzupełnianej mapie. Bieżącym priorytetem są skany; meblowanie pozostaje pomysłem na później. Kierunek produktu jest zapisany w [głównym README](../README.md#kierunek-produktu).
 
 Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Własny interfejs skanowania kamerą i pozostałe warstwy instalacji nie są jeszcze zaimplementowane.
 

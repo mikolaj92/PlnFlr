@@ -1,26 +1,27 @@
 # PlnFlr
 
-Mapa naszego domu, budowana razem z nami — od skanów i pomiarów, przez planowanie prac, po dokumentowanie tego, co zostało wykonane. Podłogi są pierwszym zastosowaniem, nie granicą produktu.
+Mapa naszego domu, budowana razem z nami — od skanów i pomiarów, przez planowanie prac, po dokumentowanie tego, co zostało wykonane. Zaczynamy od skanów całego domu i poszczególnych pomieszczeń; podłogi są kolejnym etapem, nie granicą produktu.
 
 ## Kierunek produktu
 
 Punktem wyjścia jest skanowanie i poznawanie przestrzeni domu. Mapa ma być stopniowo uzupełniana i poprawiana przez użytkownika w trakcie budowy, remontu i użytkowania, a nie być jednorazowym wynikiem skanu.
 
-Na tej samej mapie docelowo będziemy rozmieszczać, planować i dokumentować:
+Kolejność rozwoju produktu:
 
-- podłogi i inne elementy wykończenia;
-- instalacje wodne i kanalizacyjne;
-- instalacje elektryczne;
-- instalacje powietrzne i wentylacyjne;
-- kolejne rodzaje instalacji i wyposażenia, w miarę potrzeb.
+1. **Skany całego domu i poszczególnych pomieszczeń** — budowanie i uzupełnianie wspólnej mapy domu. To bieżący priorytet.
+2. **Podłogi** — planowanie ich układu na zbudowanej mapie.
+3. **Instalacje** — rozmieszczanie, planowanie i dokumentowanie instalacji wodnych, kanalizacyjnych, elektrycznych, powietrznych, wentylacyjnych i innych.
+4. **Możliwe późniejsze rozszerzenie: meblowanie domu** — rozmieszczanie mebli i wyposażenia na tej samej mapie. To pomysł na dalszy rozwój, nie zobowiązanie obecnego zakresu.
+
+Ta kolejność określa priorytety dalszych prac. Istniejący kod planowania podłóg nie oznacza, że etap skanowania całego domu jest już domknięty.
 
 To warstwy jednego projektu domu, powiązane ze wspólną przestrzenią, nie osobne, niepowiązane plany. Stan istniejący i wykonany powinien być odróżnialny od zamierzeń. Skan jest źródłem geometrii — nie oznacza automatycznego rozpoznania ukrytych instalacji.
 
 **Stan obecny:** aplikacja natywna importuje istniejące skany RoomPlan USDZ albo przyjmuje wymiary prostokątnego pokoju, zapisuje projekty lokalnie i planuje podłogi. Nie ma jeszcze własnego interfejsu skanowania kamerą ani edytorów pozostałych instalacji. Powyższy kierunek nie jest listą już dostarczonych funkcji.
 
-Obecne drzewo `Workspace → Project → Scan + Floor` opisuje pierwszy etap. `Project` jest miejscem dalszego rozwoju mapy domu; przyszłe instalacje nie powinny być modelowane jako rodzaje podłogi. Nie dodajemy teraz pustych modułów ani nowego schematu danych na zapas.
+Obecne drzewo `Workspace → Project → Scan + Floor` opisuje aktualną implementację, nie kolejność rozwoju produktu. `Project` jest miejscem dalszego rozwoju mapy domu; przyszłe instalacje nie powinny być modelowane jako rodzaje podłogi. Nie dodajemy teraz pustych modułów ani nowego schematu danych na zapas.
 
-## Planowanie podłóg — pierwszy etap
+## Planowanie podłóg — istniejąca implementacja
 
 Z obrysu pomieszczenia (prostokąt, L, dowolny wielokąt z otworami) i wymiaru deski albo kafelka kernel liczy dylatację, siatkę, docinki, BOM i pokazuje cały układ podłogi.
 
