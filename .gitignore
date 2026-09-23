@@ -17,4 +17,7 @@ logs/
 data/*.json
 .build/
 .swiftpm/
+.derivedData/
+xcuserdata/
+*.xcresult/
 

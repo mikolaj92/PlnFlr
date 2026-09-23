@@ -1,0 +1,28 @@
+{
+  "identifier" : "AF702C81-A33E-43EE-B787-705D53C6017B",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "49.99",
+      "familyShareable" : false,
+      "internalID" : "840100001",
+      "localizations" : [
+        { "description" : "Nieograniczona liczba planowanych pokoi. Jednorazowy zakup.", "displayName" : "PlnFlr Pro", "locale" : "pl_PL" },
+        { "description" : "Plan unlimited rooms. One-time purchase.", "displayName" : "PlnFlr Pro", "locale" : "en_US" }
+      ],
+      "productID" : "it.patryk.plnflr.pro",
+      "referenceName" : "PlnFlr Pro (local testing)",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "pl_PL",
+    "_storefront" : "POL",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : { "major" : 3, "minor" : 0 }
+}

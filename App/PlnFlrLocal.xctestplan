@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "id": "1229BFB1-6E74-41E5-B96B-DCFA14012022",
+      "name": "Local",
+      "options": {
+      }
+    }
+  ],
+  "defaultOptions": {
+    "storeKitConfigurationFilePath": "$(SRCROOT)/PlnFlr.storekit"
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:PlnFlr.xcodeproj",
+        "identifier": "25B409916BD6977063574701",
+        "name": "PlnFlrLocalTests"
+      }
+    }
+  ],
+  "version": 1
+}

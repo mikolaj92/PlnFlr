@@ -18,6 +18,13 @@ swift run --package-path App PlnFlrApp
 
 v0.1: lista pokoi jednego otwartego użytkownika. User podaje obrys, kąt i ewentualną podziałkę (np. pół kafelki, pół panele) albo wgrywa skan RoomPlan (USDZ). Serwer liczy dylatację, siatkę, docinki, odcięcia na progach (listwa), BOM i kolejność. Bez kont.
 
+## Native app (local)
+
+Native onboarding, local project autosave and StoreKit Pro work live under `App/`.
+Open `App/PlnFlrWorkspace.xcworkspace` for the macOS/iOS app target and local StoreKit configuration.
+See [App/README.md](App/README.md) for testing, current environment blockers, and the free-room policy.
+No shared web/native accounts or entitlements. No TestFlight deployment yet.
+
 ## Live
 
 LaunchAgent `dev.plnflr.api` on mini-m4-0 (`0.0.0.0:8004`). Caddy CT109 reverse-proxies `plnflr.patryk.it`. After merge to `main`, restart the unit:
