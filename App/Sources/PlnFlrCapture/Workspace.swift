@@ -15,11 +15,14 @@ public struct Workspace {
             /// Full Apple CapturedRoom encoding, independent of derived floor geometry.
             public var roomPlanJSON: Data?
 
-            public init(id: UUID, label: String, rooms: [CapturedRoom], roomPlanJSON: Data? = nil) {
+            public var roomPlanStructure: RoomPlanStructureSource?
+
+            public init(id: UUID, label: String, rooms: [CapturedRoom], roomPlanJSON: Data? = nil, roomPlanStructure: RoomPlanStructureSource? = nil) {
                 self.label = label
                 self.rooms = rooms
                 self.scanID = id
                 self.roomPlanJSON = roomPlanJSON
+                self.roomPlanStructure = roomPlanStructure
             }
         }
 
@@ -35,6 +38,8 @@ public struct Workspace {
             public var accessID: UUID
             public var error: String?
             public var expansionMm: String
+            public var finish = FloorFinish.oak
+            public var isShowing3DPreview = false
             public var floorID: UUID
             public var id: UUID { floorID }
             public var name: String
@@ -77,8 +82,18 @@ public struct Workspace {
         public var body: some Feature {
             Update { _, _ in }
                 .onChange(of: WorkspaceArchive.FloorRecord(store.state)) { state in
+                    guard state.plan != nil else {
+                        state.error = nil
+                        return
+                    }
                     state.plan = nil
-                    state.error = nil
+                    do {
+                        state.plan = try state.makePlan()
+                        state.error = nil
+                    } catch {
+                        state.plan = nil
+                        state.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    }
                 }
         }
     }
@@ -171,6 +186,7 @@ public struct Workspace {
     public enum Action {
         case scanRoomButtonTapped
         case roomCaptureFinished(Data)
+        case structureCaptureFinished(RoomPlanStructureSource)
         case roomCaptureCancelled
         case roomCaptureFailed(String)
         case buyProButtonTapped
@@ -206,7 +222,7 @@ public struct Workspace {
         Update { state, action in
             if state.storageError != nil && !state.hasLoaded {
                 switch action {
-                case .scanRoomButtonTapped, .roomCaptureFinished,
+                case .scanRoomButtonTapped, .roomCaptureFinished, .structureCaptureFinished,
                      .addRoomButtonTapped, .importUsdz, .newProjectButtonTapped,
                      .joinSelectedButtonTapped, .splitSelectedButtonTapped,
                      .planFloorButtonTapped, .projects:
@@ -240,6 +256,24 @@ public struct Workspace {
                 state.projects[index].scans.append(Scan.State(
                     id: uuid(), label: "Skan \(state.projects[index].scans.count + 1)",
                     rooms: [], roomPlanJSON: source
+                ))
+                state.error = nil
+            case .structureCaptureFinished(let source):
+                guard state.isCapturingRoom else { return }
+                state.isCapturingRoom = false
+                guard !source.rooms.isEmpty, source.rooms.allSatisfy({ !$0.isEmpty }), !source.structure.isEmpty else {
+                    state.error = "Skan jest pusty. Spróbuj ponownie."
+                    return
+                }
+                if state.selectedProjectIndex == nil {
+                    let project = Project.State(id: uuid(), name: "Projekt \(state.projects.count + 1)")
+                    state.projects.append(project)
+                    state.selectedProjectID = project.id
+                }
+                guard let index = state.selectedProjectIndex else { return }
+                state.projects[index].scans.append(Scan.State(
+                    id: uuid(), label: "Skan \(state.projects[index].scans.count + 1)",
+                    rooms: [], roomPlanStructure: source
                 ))
                 state.error = nil
             case .refreshAccess:

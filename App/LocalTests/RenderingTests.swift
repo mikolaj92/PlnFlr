@@ -1,6 +1,7 @@
 import AppKit
 import ComposableArchitecture2
 import PlnFlrLayout
+import SceneKit
 import SwiftUI
 import XCTest
 @testable import PlnFlrCapture
@@ -17,6 +18,58 @@ final class RenderingTests: XCTestCase {
         var state = Workspace.State()
         state.proProduct = .init(displayPrice: "49,99 zł")
         try capture(ProView(store: Store(initialState: state) { Workspace() }).frame(width: 540, height: 740), name: "pro")
+    }
+
+    func testFloorSceneUsesBothFinishGroupsAndAnInteractiveCamera() throws {
+        let floor = Workspace.Floor.State(id: UUID(), name: "Salon", room: try rectangle(widthMm: 4000, heightMm: 3000))
+        let plan = try floor.makePlan()
+        let scene = Floor3DScene.make(plan: plan, finish: .oak)
+        let floorNode = try XCTUnwrap(scene.rootNode.childNodes.first { $0.name == "floor" })
+        let finishNodes = floorNode.childNodes.filter { $0.name?.hasPrefix("floor.finish.") == true }
+
+        XCTAssertEqual(finishNodes.count, 2)
+        XCTAssertTrue(finishNodes.allSatisfy { $0.geometry != nil })
+        let walnutScene = Floor3DScene.make(plan: plan, finish: .walnut)
+        let walnutNode = try XCTUnwrap(walnutScene.rootNode.childNodes.first { $0.name == "floor" }?.childNodes.first { $0.name == "floor.finish.0" })
+        let oakNode = try XCTUnwrap(floorNode.childNodes.first { $0.name == "floor.finish.0" })
+        XCTAssertNotEqual(walnutNode.geometry?.materials.first?.diffuse.contents as? NSColor,
+                          oakNode.geometry?.materials.first?.diffuse.contents as? NSColor)
+        XCTAssertNotNil(scene.rootNode.childNodes.first { $0.name == "floor.camera" }?.camera)
+        XCTAssertTrue(scene.rootNode.childNodes.contains { $0.camera != nil })
+        let rendered = SCNRenderer(device: nil, options: nil)
+        rendered.scene = scene
+        let image = rendered.snapshot(atTime: 0, with: CGSize(width: 600, height: 400), antialiasingMode: .multisampling4X)
+        let cgImage = try XCTUnwrap(image.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        let woodPixels = (0..<bitmap.pixelsWide).reduce(into: 0) { count, x in
+            for y in 0..<bitmap.pixelsHigh {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                if color.redComponent > color.greenComponent * 1.05,
+                   color.greenComponent > color.blueComponent * 1.05,
+                   color.redComponent < 0.95,
+                   color.greenComponent < 0.9 {
+                    count += 1
+                }
+            }
+        }
+        XCTAssertGreaterThan(woodPixels, 100)
+    }
+
+    func testTilePreviewUsesStoneColorsInsteadOfWoodFinishColors() throws {
+        var floor = Workspace.Floor.State(id: UUID(), name: "Łazienka", room: try rectangle(widthMm: 3000, heightMm: 3000))
+        floor.material = .tile
+        floor.plankLengthM = "0.6"
+        floor.plankWidthM = "0.6"
+        let plan = try floor.makePlan()
+        let scene = Floor3DScene.make(plan: plan, finish: .oak, material: .tile)
+        let floorNode = try XCTUnwrap(scene.rootNode.childNodes.first { $0.name == "floor" })
+        let tiles = try XCTUnwrap(floorNode.childNodes.first { $0.name == "floor.finish.0" })
+        let tileColor = try XCTUnwrap(tiles.geometry?.materials.first?.diffuse.contents as? NSColor)
+        let wood = NSColor(red: 0.78, green: 0.60, blue: 0.37, alpha: 1)
+        XCTAssertNotEqual(tileColor, wood)
+        let canvas = FloorCanvas(plan: plan, finish: .oak, material: .tile)
+        XCTAssertEqual(canvas.material, .tile)
+        XCTAssertEqual(plan.bom.kind, .tile)
     }
 
     func testDarkCanvasHoleUsesBackgroundInsteadOfWhitePaint() throws {

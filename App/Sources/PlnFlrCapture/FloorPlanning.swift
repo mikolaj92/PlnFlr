@@ -1,3 +1,4 @@
+import Foundation
 import PlnFlrLayout
 
 public enum FloorMaterial: String, Codable, Equatable, Sendable {
@@ -5,14 +6,31 @@ public enum FloorMaterial: String, Codable, Equatable, Sendable {
     case tile
 }
 
+public enum FloorFinish: String, Codable, Equatable, Sendable {
+    case oak
+    case walnut
+
+    var previewColors: [String] {
+        switch self {
+        case .oak: ["#C7995E", "#AD7A45"]
+        case .walnut: ["#6E4733", "#543322"]
+        }
+    }
+}
+
 extension Workspace.Floor.State {
     mutating func copyMaterial(from other: Self) {
         material = other.material
         packSize = other.packSize
         groutMm = other.groutMm
+        finish = other.finish
     }
 
     func makePlan() throws -> LayoutPlan {
+        guard let lengthValue = Decimal(string: plankLengthM), lengthValue > 0,
+              let widthValue = Decimal(string: plankWidthM), widthValue > 0 else {
+            throw MaterialInputError.invalid
+        }
         let length = try metresToMm(plankLengthM)
         let width = try metresToMm(plankWidthM)
         guard (50...5000).contains(length), (50...5000).contains(width),

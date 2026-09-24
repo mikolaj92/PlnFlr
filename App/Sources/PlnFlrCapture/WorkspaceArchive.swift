@@ -33,7 +33,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         init(_ state: Workspace.Project.State) {
             id = state.id
             name = state.name
-            scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON) }
+            scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure) }
             floors = state.floors.map(FloorRecord.init)
             selectedFloorIDs = state.selectedFloorIDs
             splitAtM = state.splitAtM
@@ -41,7 +41,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         }
 
         var state: Workspace.Project.State {
-            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON) },
+            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure) },
                   floors: floors.map(\.state), selectedFloorIDs: selectedFloorIDs,
                   splitAtM: splitAtM, splitAxis: splitAxis)
         }
@@ -52,6 +52,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var label: String
         var rooms: [CapturedRoom]
         var roomPlanJSON: Data?
+        var roomPlanStructure: RoomPlanStructureSource?
     }
 
     public struct FloorRecord: Codable, Equatable, Sendable {
@@ -65,6 +66,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var thresholds: [Threshold]
         var windows: [Opening]
         var expansionMm: String
+        var finish: FloorFinish?
         var plankLengthM: String
         var plankWidthM: String
 
@@ -79,6 +81,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             thresholds = state.thresholds
             windows = state.windows
             expansionMm = state.expansionMm
+            finish = state.finish
             plankLengthM = state.plankLengthM
             plankWidthM = state.plankWidthM
         }
@@ -89,6 +92,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             state.material = material
             state.packSize = packSize
             state.groutMm = groutMm
+            state.finish = finish ?? .oak
             return state
         }
     }

@@ -22,7 +22,7 @@ public struct WorkspaceView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
                     #if os(iOS)
-                    Button("Skanuj pokój", systemImage: "camera.viewfinder") { store.send(.scanRoomButtonTapped) }
+                    Button("Skanuj pomieszczenia", systemImage: "camera.viewfinder") { store.send(.scanRoomButtonTapped) }
                     #endif
                     Button("Nowy projekt", systemImage: "folder.badge.plus") { store.send(.newProjectButtonTapped) }
                     Button("Dodaj pokój", systemImage: "rectangle.badge.plus") { $store.isAddingRoom.wrappedValue = true }
@@ -53,7 +53,7 @@ public struct WorkspaceView: View {
         #if os(iOS)
         .fullScreenCover(isPresented: $store.isCapturingRoom) {
             RoomScannerView(
-                onSave: { store.send(.roomCaptureFinished($0)) },
+                onSave: { store.send(.structureCaptureFinished($0)) },
                 onCancel: { store.send(.roomCaptureCancelled) },
                 onFailure: { store.send(.roomCaptureFailed($0)) }
             )
@@ -199,8 +199,13 @@ private struct ScanRowView: View {
     var body: some View {
         VStack(alignment: .leading) {
             TextField("Nazwa skanu", text: $store.label)
-            Text(store.roomPlanJSON == nil ? "Powierzchnie: \(store.rooms.count)" : "Pełny skan RoomPlan zapisany")
-                .font(.caption).foregroundStyle(.secondary)
+            if let source = store.roomPlanStructure {
+                Text("RoomPlan: \(source.rooms.count) pokoi we wspólnej sesji")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(store.roomPlanJSON == nil ? "Powierzchnie: \(store.rooms.count)" : "Pełny skan RoomPlan zapisany")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -274,6 +279,10 @@ public struct FloorView: View {
         VStack(alignment: .leading, spacing: 16) {
             TextField("Nazwa pokoju", text: $store.name).font(.title2.bold())
             Text("Ustaw materiał").font(.headline)
+            Picker("Wykończenie", selection: $store.finish) {
+                Text("Dąb").tag(FloorFinish.oak)
+                Text("Orzech").tag(FloorFinish.walnut)
+            }.pickerStyle(.segmented)
             Picker("Materiał", selection: $store.material) {
                 Text("Deski / panele").tag(FloorMaterial.plank)
                 Text("Płytki").tag(FloorMaterial.tile)
@@ -298,8 +307,19 @@ public struct FloorView: View {
                         .accessibilityIdentifier("planSummary")
                     Text("Odpad: \(plan.bom.wastePct)%")
                     Text(plan.rationalePl).foregroundStyle(.secondary)
-                    FloorCanvas(plan: plan).frame(height: 320)
-                        .accessibilityIdentifier("floorPreview")
+                    Picker("Podgląd", selection: $store.isShowing3DPreview) {
+                        Text("2D").tag(false)
+                        Text("3D").tag(true)
+                    }.pickerStyle(.segmented)
+                    if store.isShowing3DPreview {
+                        Floor3DPreview(plan: plan, finish: store.finish, material: store.material)
+                            .frame(height: 320)
+                            .accessibilityIdentifier("floor3DPreview")
+                    } else {
+                        FloorCanvas(plan: plan, finish: store.finish, material: store.material)
+                            .frame(height: 320)
+                            .accessibilityIdentifier("floorPreview")
+                    }
                     ForEach(Array(plan.warnings.enumerated()), id: \.offset) { _, warning in
                         Label(warning.messagePl, systemImage: "exclamationmark.triangle")
                     }

@@ -3,6 +3,8 @@ import SwiftUI
 
 struct FloorCanvas: View {
     var plan: LayoutPlan
+    var finish: FloorFinish = .oak
+    var material: FloorMaterial = .plank
 
     var body: some View {
         Canvas { context, size in
@@ -20,10 +22,8 @@ struct FloorCanvas: View {
             for hole in plan.room.holes { outline.addPath(path(hole.vertices, point)) }
             context.fill(outline, with: .color(.secondary.opacity(0.15)), style: FillStyle(eoFill: true))
             for piece in plan.pieces {
-                let color: Color = piece.rowIndex.isMultiple(of: 2)
-                    ? Color.orange.opacity(0.55)
-                    : Color.brown.opacity(0.45)
-                context.fill(path(piece.geometry, point), with: .color(color))
+                let color = Color(hex: material == .tile ? stonePreviewColors[piece.rowIndex.isMultiple(of: 2) ? 0 : 1] : finish.previewColors[piece.rowIndex.isMultiple(of: 2) ? 0 : 1])
+                context.fill(path(piece.geometry, point), with: .color(color.opacity(0.88)))
                 context.stroke(path(piece.geometry, point), with: .color(.primary.opacity(0.4)), lineWidth: 0.5)
             }
             for window in plan.windows {
@@ -45,5 +45,20 @@ struct FloorCanvas: View {
         }
         p.closeSubpath()
         return p
+    }
+}
+
+private let stonePreviewColors = ["#B8B9B3", "#999D99"]
+
+private extension Color {
+    init(hex: String) {
+        let value = UInt32(hex.dropFirst(), radix: 16) ?? 0xC69A62
+        self.init(
+            .sRGB,
+            red: Double((value >> 16) & 0xff) / 255,
+            green: Double((value >> 8) & 0xff) / 255,
+            blue: Double(value & 0xff) / 255,
+            opacity: 1
+        )
     }
 }

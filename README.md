@@ -10,10 +10,41 @@ Kolejność rozwoju produktu:
 
 1. **Skany całego domu i poszczególnych pomieszczeń** — budowanie i uzupełnianie wspólnej mapy domu. To bieżący priorytet.
 2. **Podłogi** — planowanie ich układu na zbudowanej mapie.
-3. **Instalacje** — rozmieszczanie, planowanie i dokumentowanie instalacji wodnych, kanalizacyjnych, elektrycznych, powietrznych, wentylacyjnych i innych.
-4. **Możliwe późniejsze rozszerzenie: meblowanie domu** — rozmieszczanie mebli i wyposażenia na tej samej mapie. To pomysł na dalszy rozwój, nie zobowiązanie obecnego zakresu.
+3. **Wykończenia ścian i wnętrza** — zmiana kolorów i materiałów na tej samej mapie 3D, po podłogach.
+4. **Instalacje** — rozmieszczanie, planowanie i dokumentowanie instalacji wodnych, kanalizacyjnych, elektrycznych, powietrznych, wentylacyjnych i innych.
+5. **Meble i wyposażenie** — rozmieszczanie ich na tej samej mapie domu.
 
-Bieżący zakres prac obejmuje **1 i 2: skany domu i pomieszczeń, następnie podłogi**. Instalacje i ewentualne meblowanie pozostają na później. Istniejący kod planowania podłóg nie oznacza, że etap skanowania całego domu jest już domknięty.
+Bieżący zakres prac obejmuje **1 i 2: skany domu i pomieszczeń, następnie podłogi**. Potem mapa 3D rozszerzy się o wykończenia ścian, instalacje i wyposażenie. Istniejący kod planowania podłóg nie oznacza, że etap skanowania całego domu jest już domknięty.
+
+### Cel produktu — SOUL
+
+**Każdy dom powinien mieć swój wierny, trwały model 3D**, widoczny w aplikacji i rozwijany jako mapa rzeczywistego domu. Jeden model pozwala pracować na wybranym zakresie: pojedynczym pomieszczeniu, kondygnacji albo całym domu — na przykład zaplanować podłogę w jednym pokoju lub policzyć ją dla całego domu.
+
+Zmiana zaczyna się w modelu, nie od razu w domu. Właściciel zachowuje stan obecny, tworzy wariant podłogi, ogląda go przestrzennie w pokoju i kontekście domu, porównuje materiały i układy, a następnie oblicza rzeczywiste ilości materiału dla tego samego wariantu. Wizualizacja ma pomagać wyobrazić sobie efekt przed remontem — jak konfigurator wnętrza, np. IKEA. BOM pochodzi z geometrii i parametrów wybranego materiału, a nie z dekoracyjnego obrazka; jego dokładność nie może przekraczać dokładności źródłowych pomiarów.
+
+Docelowo tę samą mapę 3D będzie można rozszerzać o kolory i wykończenia ścian, udokumentowane instalacje wewnątrz ścian, a później meble i inne wyposażenie. To kolejne warstwy tego samego domu.
+
+Test sensu produktu: przed wierceniem użytkownik wskazuje miejsce i głębokość, a aplikacja pokazuje udokumentowane instalacje, które mogą się tam znaleźć. **Skan geometrii nie odkrywa sam instalacji ukrytych w ścianie.** Trasy muszą być zapisane na podstawie pomiaru, odkrycia, dokumentacji lub innego jawnego źródła; mapa odróżnia potwierdzone dane od przybliżonych, niezweryfikowanych i planowanych. Brak danych nie oznacza braku instalacji ani gwarancji, że wiercenie jest bezpieczne.
+
+Źródła i poprawki mają przetrwać. Dokładność jest ważniejsza niż pozorna kompletność. Pełny kompas produktu i kryteria są w [SOUL.md](SOUL.md).
+
+### Podłogi — wizualizacja i rzeczywiste ilości
+
+Podłoga nie jest tylko wynikiem BOM. Właściciel wybiera pokój, kondygnację lub dom na mapie, zmienia materiał i układ jako wariant, ogląda wizualizację, a następnie oblicza rzeczywiste ilości dla dokładnie tego wariantu. Stan istniejący pozostaje zachowany; projektowana zmiana nie nadpisuje go przed wykonaniem.
+
+**Wymóg produktu:** podgląd ma pokazywać podłogę w kontekście rzeczywistej przestrzeni — docelowo w 3D, w stylu konfiguratora wnętrza. Wizualizacja, geometria i obliczenia muszą być spójne: wybór układu widoczny w podglądzie zasila BOM i koszt, a grafika nie sugeruje dokładności większej niż pomiary źródłowe. Pierwszy wycinek jest dostępny: po wyliczeniu planu można przełączyć uproszczony podgląd elementów z `LayoutPlan` na obracany widok 3D, wybrać kolorystykę dąb/orzech dla podłogi deskowej lub neutralną kamienną dla płytek. Nie jest to jeszcze konfigurator wnętrza całego pokoju: zapisany skan RoomPlan nie jest renderowany w tle, tekstury nie odwzorowują konkretnego produktu, a podgląd nie podnosi dokładności pomiarów.
+
+### Skany — łączenie i rozdzielanie modeli
+
+Docelowo sposób zebrania danych nie narzuca podziału domu: można skanować pokoje osobno, całą kondygnację albo przejść przez cały dom, a potem uporządkować model. Dotyczy to także importowanych modeli USDZ, nie tylko skanów wykonanych w aplikacji.
+
+- **Łączenie:** zestawienie kilku modeli w jedną mapę, z zachowaniem części źródłowych. Osobne sesje mogą mieć różne początki układu współrzędnych; potrzebne są podgląd oraz korekta przesunięcia, obrotu i wysokości. Samo zgrupowanie nie oznacza automatycznego dopasowania ani usunięcia zdublowanych ścian.
+- **Rozdzielanie:** wydzielenie z większego modelu pomieszczeń, kondygnacji lub wskazanych fragmentów, bez zmiany ich położenia we wspólnej przestrzeni. Gdy źródło nie ma takich części, potrzebne jest zaznaczenie lub cięcie geometrii — nie zakładamy, że każdy USDZ zawiera semantykę pokoi.
+- **Niedestrukcyjność:** oryginalne pliki pozostają zachowane; można odłączyć część lub cofnąć operację. Eksport wybranej części albo całości do USDZ jest osobnym wynikiem pracy, nie zamiennikiem źródeł projektu.
+
+To wymagania bieżącego etapu skanów, jeszcze nie dostarczone funkcje. Istniejący podział i łączenie powierzchni podłogowych 2D nie realizuje operacji na pełnych modelach 3D. Przejście przez cały dom jest scenariuszem docelowym, nie gwarancją nieograniczonej sesji RoomPlan; trzeba uwzględnić ograniczenia śledzenia, rozmiaru sceny i kondygnacji.
+
+Kolejność: zachowanie oryginalnych USDZ i podgląd 3D → ustawianie i łączenie modeli → wydzielanie części i eksport. Obsługę wariantów USDZ weryfikujemy na rzeczywistych plikach; obecny importer podłóg nie jest ogólnym edytorem USDZ.
 
 ### Instalacje — jeden prosty mechanizm na później
 
@@ -23,7 +54,7 @@ To model do rozmieszczania i dokumentowania tras, nie deklaracja obliczeń hydra
 
 To warstwy jednego projektu domu, powiązane ze wspólną przestrzenią, nie osobne, niepowiązane plany. Stan istniejący i wykonany powinien być odróżnialny od zamierzeń. Skan jest źródłem geometrii — nie oznacza automatycznego rozpoznania ukrytych instalacji.
 
-**Stan obecny:** aplikacja natywna importuje istniejące skany RoomPlan USDZ albo przyjmuje wymiary prostokątnego pokoju, zapisuje projekty lokalnie i planuje podłogi. Na iOS dodano skanowanie pojedynczego pokoju przez interfejs Apple RoomPlan oraz zapis pełnego modelu źródłowego. Ta ścieżka jest sprawdzona kompilacją, nie skanem na fizycznym urządzeniu; nie wyprowadza jeszcze podłóg ani nie składa osobnych sesji w mapę domu. Nie ma jeszcze edytorów pozostałych instalacji. Powyższy kierunek nie jest listą już dostarczonych funkcji.
+**Stan obecny:** aplikacja natywna importuje istniejące skany RoomPlan USDZ albo przyjmuje wymiary prostokątnego pokoju, zapisuje projekty lokalnie i planuje podłogi. Na iOS dodano przebieg wielu pokoi w jednej sesji Apple RoomPlan, składanie przez `StructureBuilder` oraz zapis modeli źródłowych i wyniku. Ta ścieżka jest sprawdzona kompilacją i testami logiki/zapisu, nie skanem na fizycznym urządzeniu; nie wyprowadza jeszcze podłóg ani nie składa osobnych sesji lub importowanych USDZ w mapę domu. Nie ma jeszcze edytorów pozostałych instalacji. Powyższy kierunek nie jest listą już dostarczonych funkcji.
 
 Obecne drzewo `Workspace → Project → Scan + Floor` opisuje aktualną implementację, nie kolejność rozwoju produktu. `Project` jest miejscem dalszego rozwoju mapy domu; przyszłe instalacje nie powinny być modelowane jako rodzaje podłogi. Nie dodajemy teraz pustych modułów ani nowego schematu danych na zapas.
 

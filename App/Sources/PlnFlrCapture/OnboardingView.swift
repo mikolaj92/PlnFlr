@@ -10,7 +10,7 @@ struct WelcomeView: View {
                 Image(systemName: "square.grid.3x3.square").font(.system(size: 48)).foregroundStyle(.orange)
                 Text("Zbuduj mapę swojego domu").font(.largeTitle.bold())
                 #if os(iOS)
-                Button("Skanuj pokój", systemImage: "camera.viewfinder") { store.send(.scanRoomButtonTapped) }
+                Button("Skanuj pomieszczenia", systemImage: "camera.viewfinder") { store.send(.scanRoomButtonTapped) }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("startRoomCapture")
                 #endif
