@@ -3,6 +3,9 @@ import Foundation
 import PlnFlrLayout
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(iOS)
+import QuickLook
+#endif
 
 public struct WorkspaceView: View {
     @Bindable public var store: StoreOf<Workspace>
@@ -104,6 +107,9 @@ public struct WorkspaceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
+                    if !project.scans.isEmpty {
+                        RoomPlanSourceListView(scans: project.scans)
+                    }
                     if project.floors.isEmpty {
                         if !project.scans.isEmpty {
                             Label("Zapisane skany: \(project.scans.count). Skany z aparatu zachowują pełny model RoomPlan; podłogi nie zostały jeszcze wyprowadzone.", systemImage: "checkmark.circle")
@@ -130,7 +136,10 @@ public struct WorkspaceView: View {
                         DisclosureGroup("Podział i łączenie powierzchni") {
                             SplitControlsView(store: projectStore,
                                 split: { store.send(.splitSelectedButtonTapped) },
-                                join: { store.send(.joinSelectedButtonTapped) })
+                                join: { store.send(.joinSelectedButtonTapped) },
+                                undo: { projectStore.send(.undoLastGeometryCorrectionButtonTapped) },
+                                planSelection: { store.send(.planSelectedFloorsButtonTapped(project.id)) },
+                                undoVariant: { projectStore.send(.undoLastFloorVariantButtonTapped) })
                         }
                     }
                 }
@@ -171,6 +180,90 @@ private struct ProjectHeaderView: View {
     }
 }
 
+private struct RoomPlanSourceListView: View {
+    let scans: [Workspace.Scan.State]
+    @State private var previewURL: URL?
+    @State private var previewError: String?
+
+    private var listed: [Workspace.Scan.State] {
+        scans.filter { $0.roomPlanStructure != nil || $0.sourceUsdz != nil }
+    }
+
+    var body: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(listed, id: \.id) { scan in
+                sourceCard(scan)
+            }
+        }
+        .quickLookPreview($previewURL)
+        .accessibilityIdentifier("roomPlan3DSourceList")
+        #else
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(listed, id: \.id) { scan in
+                sourceCard(scan, interactive: false)
+            }
+        }
+        .accessibilityIdentifier("roomPlan3DSourceList")
+        #endif
+    }
+
+    @ViewBuilder
+    private func sourceCard(_ scan: Workspace.Scan.State, interactive: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title(scan), systemImage: "view.3d")
+                .font(.headline)
+            Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            #if os(iOS)
+            if interactive, let source = scan.roomPlanStructure {
+                Button("Otwórz podgląd 3D") {
+                    do {
+                        previewError = nil
+                        previewURL = try RoomPlanStructurePreview.exportURL(source)
+                    } catch {
+                        previewError = "Nie udało się przygotować podglądu: \(error.localizedDescription)"
+                    }
+                }
+            } else {
+                Text(limit(scan))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            #else
+            Text(limit(scan))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            #endif
+            if let previewError {
+                Label(previewError, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: .rect(cornerRadius: 12))
+        .accessibilityIdentifier("roomPlanSource.\(scan.id.uuidString)")
+    }
+
+    private func title(_ scan: Workspace.Scan.State) -> String {
+        RoomPlanStructureSource.listedSourceTitle(
+            label: scan.label,
+            roomCount: scan.roomPlanStructure?.rooms.count,
+            hasSourceUsdz: scan.sourceUsdz != nil
+        ) ?? scan.label
+    }
+
+    private func limit(_ scan: Workspace.Scan.State) -> String {
+        if scan.roomPlanStructure != nil {
+            return "Podgląd 3D skanu RoomPlan jest dostępny w aplikacji na iPhone’a lub iPada."
+        }
+        return "Zachowano oryginalny plik USDZ. Interaktywny podgląd meshu nie jest jeszcze dostępny na tym urządzeniu."
+    }
+}
+
 private struct ProjectRoomsView: View {
     @Bindable var store: StoreOf<Workspace.Project>
     var body: some View {
@@ -188,6 +281,11 @@ private struct ProjectRoomsView: View {
             if !store.scans.isEmpty {
                 Section("Skany źródłowe") {
                     ForEach(store.scope(\.scans)) { scan in ScanRowView(store: scan) }
+                    if store.scanPlacements.contains(where: { !store.undoneScanPlacementIDs.contains($0.id) }) {
+                        Button("Cofnij ostatnie ustawienie skanu") {
+                            store.send(.undoLastScanPlacementButtonTapped)
+                        }
+                    }
                 }
             }
         }
@@ -196,15 +294,33 @@ private struct ProjectRoomsView: View {
 
 private struct ScanRowView: View {
     @Bindable var store: StoreOf<Workspace.Scan>
+    @State private var xMm = "0"
+    @State private var yMm = "0"
+    @State private var zMm = "0"
+    @State private var yawDegrees = "0"
+
     var body: some View {
         VStack(alignment: .leading) {
             TextField("Nazwa skanu", text: $store.label)
             if let source = store.roomPlanStructure {
                 Text("RoomPlan: \(source.rooms.count) pokoi we wspólnej sesji")
                     .font(.caption).foregroundStyle(.secondary)
+            } else if store.sourceUsdz != nil {
+                Text("Oryginalny USDZ zachowany · powierzchnie: \(store.rooms.count)")
+                    .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text(store.roomPlanJSON == nil ? "Powierzchnie: \(store.rooms.count)" : "Pełny skan RoomPlan zapisany")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Ustawienie: X \(store.transform.xMm) mm, Y \(store.transform.yMm) mm, Z \(store.transform.zMm) mm, obrót \(store.transform.yawDegrees)°")
+                .font(.caption).foregroundStyle(.secondary)
+            TextField("X (mm)", text: $xMm)
+            TextField("Y (mm)", text: $yMm)
+            TextField("Z (mm)", text: $zMm)
+            TextField("Obrót (°)", text: $yawDegrees)
+            Button("Ustaw skan") {
+                guard let x = Int(xMm), let y = Int(yMm), let z = Int(zMm), let yaw = Int(yawDegrees) else { return }
+                store.send(.setManualPlacementButtonTapped(ScanTransform(xMm: x, yMm: y, zMm: z, yawDegrees: yaw)))
             }
         }
     }
@@ -232,11 +348,23 @@ private struct SplitControlsView: View {
     @Bindable var store: StoreOf<Workspace.Project>
     var split: () -> Void
     var join: () -> Void
+    var undo: () -> Void
+    var planSelection: () -> Void
+    var undoVariant: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Podział jest techniczny — obie części zachowują dostęp pokoju źródłowego. Aby połączyć, zaznacz dokładnie dwie powierzchnie.")
                 .font(.caption).foregroundStyle(.secondary)
+            if let correction = store.geometryCorrections.last(where: {
+                !store.undoneGeometryCorrectionIDs.contains($0.id)
+            }) {
+                Button("Cofnij ostatnią korektę geometrii") {
+                    undo()
+                }
+                Text("\(correction.before.count) → \(correction.after.count) powierzchni · cofnięcie zachowa poprzednią geometrię.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             ForEach(store.floors, id: \.floorID) { floor in
                 Toggle(floor.name, isOn: $store.selectedFloorIDs[contains: floor.id])
             }
@@ -249,7 +377,13 @@ private struct SplitControlsView: View {
             HStack {
                 Button("Podziel", action: split).disabled(store.selectedFloorIDs.count != 1)
                 Button("Połącz", action: join).disabled(store.selectedFloorIDs.count != 2)
+                Button("Policz zaznaczone", action: planSelection).disabled(store.selectedFloorIDs.isEmpty)
             }.buttonStyle(.bordered)
+            if let variant = store.floorVariants.last(where: { !store.undoneFloorVariantIDs.contains($0.id) }) {
+                Text("\(FloorVariant.sumLabel): \(variant.pieces) elementów, netto \(variant.areaNetMm2) mm²")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Cofnij wariant podłogi") { undoVariant() }
+            }
         }.padding(.top)
     }
 }
