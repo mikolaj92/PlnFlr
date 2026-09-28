@@ -5,8 +5,8 @@ import PackageDescription
 let package = Package(
     name: "PlnFlrApp",
     platforms: [
-        .iOS("26.4"),
-        .macOS("26.4"),
+        .iOS("27"),
+        .macOS("27"),
     ],
     products: [
         .library(name: "PlnFlrCapture", targets: ["PlnFlrCapture"]),

@@ -29,21 +29,67 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var selectedFloorIDs: [UUID]
         var splitAtM: String
         var splitAxis: SplitAxis
+        var geometryCorrections: [GeometryCorrection]
+        var undoneGeometryCorrectionIDs: [UUID]
+        var scanPlacements: [ScanPlacement]
+        var undoneScanPlacementIDs: [UUID]
+        var floorVariants: [FloorVariant]
+        var undoneFloorVariantIDs: [UUID]
+        var walls: [WallSegment]
+        var utilities: [UtilityRoute]
+        var furniture: [FurnitureItem]
 
         init(_ state: Workspace.Project.State) {
             id = state.id
             name = state.name
-            scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure) }
+            scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) }
             floors = state.floors.map(FloorRecord.init)
             selectedFloorIDs = state.selectedFloorIDs
             splitAtM = state.splitAtM
             splitAxis = state.splitAxis
+            geometryCorrections = state.geometryCorrections
+            undoneGeometryCorrectionIDs = state.undoneGeometryCorrectionIDs
+            scanPlacements = state.scanPlacements
+            undoneScanPlacementIDs = state.undoneScanPlacementIDs
+            floorVariants = state.floorVariants
+            undoneFloorVariantIDs = state.undoneFloorVariantIDs
+            walls = state.walls
+            utilities = state.utilities
+            furniture = state.furniture
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UUID.self, forKey: .id)
+            name = try container.decode(String.self, forKey: .name)
+            scans = try container.decode([ScanRecord].self, forKey: .scans)
+            floors = try container.decode([FloorRecord].self, forKey: .floors)
+            selectedFloorIDs = try container.decode([UUID].self, forKey: .selectedFloorIDs)
+            splitAtM = try container.decode(String.self, forKey: .splitAtM)
+            splitAxis = try container.decode(SplitAxis.self, forKey: .splitAxis)
+            geometryCorrections = try container.decodeIfPresent([GeometryCorrection].self, forKey: .geometryCorrections) ?? []
+            undoneGeometryCorrectionIDs = try container.decodeIfPresent([UUID].self, forKey: .undoneGeometryCorrectionIDs) ?? []
+            scanPlacements = try container.decodeIfPresent([ScanPlacement].self, forKey: .scanPlacements) ?? []
+            undoneScanPlacementIDs = try container.decodeIfPresent([UUID].self, forKey: .undoneScanPlacementIDs) ?? []
+            floorVariants = try container.decodeIfPresent([FloorVariant].self, forKey: .floorVariants) ?? []
+            undoneFloorVariantIDs = try container.decodeIfPresent([UUID].self, forKey: .undoneFloorVariantIDs) ?? []
+            walls = try container.decodeIfPresent([WallSegment].self, forKey: .walls) ?? []
+            utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
+            furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
         }
 
         var state: Workspace.Project.State {
-            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure) },
+            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) },
                   floors: floors.map(\.state), selectedFloorIDs: selectedFloorIDs,
-                  splitAtM: splitAtM, splitAxis: splitAxis)
+                  splitAtM: splitAtM, splitAxis: splitAxis, geometryCorrections: geometryCorrections,
+                  undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
+                  scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
+                  floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
+                  walls: walls, utilities: utilities, furniture: furniture)
         }
     }
 
@@ -53,6 +99,33 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var rooms: [CapturedRoom]
         var roomPlanJSON: Data?
         var roomPlanStructure: RoomPlanStructureSource?
+        var sourceUsdz: Data?
+        var transform: ScanTransform
+
+        init(id: UUID, label: String, rooms: [CapturedRoom], roomPlanJSON: Data? = nil, roomPlanStructure: RoomPlanStructureSource? = nil, sourceUsdz: Data? = nil, transform: ScanTransform = .identity) {
+            self.id = id
+            self.label = label
+            self.rooms = rooms
+            self.roomPlanJSON = roomPlanJSON
+            self.roomPlanStructure = roomPlanStructure
+            self.sourceUsdz = sourceUsdz
+            self.transform = transform
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, label, rooms, roomPlanJSON, roomPlanStructure, sourceUsdz, transform
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UUID.self, forKey: .id)
+            label = try container.decode(String.self, forKey: .label)
+            rooms = try container.decode([CapturedRoom].self, forKey: .rooms)
+            roomPlanJSON = try container.decodeIfPresent(Data.self, forKey: .roomPlanJSON)
+            roomPlanStructure = try container.decodeIfPresent(RoomPlanStructureSource.self, forKey: .roomPlanStructure)
+            sourceUsdz = try container.decodeIfPresent(Data.self, forKey: .sourceUsdz)
+            transform = try container.decodeIfPresent(ScanTransform.self, forKey: .transform) ?? .identity
+        }
     }
 
     public struct FloorRecord: Codable, Equatable, Sendable {

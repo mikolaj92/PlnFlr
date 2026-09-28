@@ -87,6 +87,27 @@ final class RenderingTests: XCTestCase {
         XCTAssertLessThan(color.blueComponent, 0.1)
     }
 
+    func testRoomPlanSourceListRendersDisclosureAndLimitOnMacOS() throws {
+        let source = RoomPlanStructureSource(rooms: [Data("kitchen".utf8), Data("hall".utf8)], structure: Data("structure".utf8))
+        let scans = [
+            Workspace.Scan.State(id: UUID(), label: "Parter", rooms: [], roomPlanStructure: source),
+            Workspace.Scan.State(id: UUID(), label: "Import", rooms: [], sourceUsdz: Data("usdz".utf8)),
+            Workspace.Scan.State(id: UUID(), label: "Pusty", rooms: []),
+        ]
+        let project = Workspace.Project.State(id: UUID(), name: "Dom", scans: scans)
+        var state = Workspace.State(projects: [project], selectedProjectID: project.id)
+        state.hasLoaded = true
+        let store = Store(initialState: state) { Workspace() }
+        let hosting = NSHostingView(rootView: WorkspaceView(store: store)
+            .frame(width: 1100, height: 900)
+            .environment(\.colorScheme, .light)
+            .background(Color.white))
+        hosting.frame.size = hosting.fittingSize
+        let bitmap = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        XCTAssertGreaterThan(bitmap.pixelsWide, 500)
+    }
+
     private func capture<V: View>(_ view: V, name: String) throws {
         _ = NSApplication.shared
         let hosting = NSHostingView(rootView: view.environment(\.colorScheme, .light).background(Color.white))

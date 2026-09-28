@@ -59,10 +59,8 @@ struct ManualRoomView: View {
             .formStyle(.grouped)
             .navigationTitle("Dodaj pokój")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItemGroup(placement: .confirmationAction) {
                     Button("Anuluj") { $store.isAddingRoom.wrappedValue = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
                     Button("Dodaj") { store.send(.addRoomButtonTapped) }
                         .accessibilityIdentifier("confirmManualRoom")
                 }

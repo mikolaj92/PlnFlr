@@ -2,6 +2,138 @@ import ComposableArchitecture2
 import Foundation
 import PlnFlrLayout
 
+/// A durable snapshot of a floor before or after a user-initiated geometry operation.
+public struct FloorSnapshot: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let room: Room
+    public let thresholds: [Threshold]
+    public let windows: [Opening]
+    public let material: FloorMaterial
+    public let packSize: String
+    public let groutMm: String
+    public let accessID: UUID
+    public let expansionMm: String
+    public let finish: FloorFinish
+    public let plankLengthM: String
+    public let plankWidthM: String
+
+    public init(_ state: Workspace.Floor.State) {
+        id = state.id
+        name = state.name
+        room = state.room
+        thresholds = state.thresholds
+        windows = state.windows
+        material = state.material
+        packSize = state.packSize
+        groutMm = state.groutMm
+        accessID = state.accessID
+        expansionMm = state.expansionMm
+        finish = state.finish
+        plankLengthM = state.plankLengthM
+        plankWidthM = state.plankWidthM
+    }
+
+    public var state: Workspace.Floor.State {
+        var state = Workspace.Floor.State(
+            id: id,
+            name: name,
+            room: room,
+            thresholds: thresholds,
+            windows: windows,
+            expansionMm: expansionMm,
+            plankLengthM: plankLengthM,
+            plankWidthM: plankWidthM,
+            accessID: accessID
+        )
+        state.material = material
+        state.packSize = packSize
+        state.groutMm = groutMm
+        state.finish = finish
+        return state
+    }
+}
+
+/// Append-only record of a geometry operation; both sides remain available for audit or undo.
+public struct GeometryCorrection: Codable, Equatable, Sendable, Identifiable {
+    public enum Operation: Codable, Equatable, Sendable {
+        case split(axis: SplitAxis, atMm: Int)
+        case join
+    }
+
+    public let id: UUID
+    public let operation: Operation
+    public let before: [FloorSnapshot]
+    public let after: [FloorSnapshot]
+
+    public init(
+        id: UUID,
+        operation: Operation,
+        before: [FloorSnapshot],
+        after: [FloorSnapshot]
+    ) {
+        self.id = id
+        self.operation = operation
+        self.before = before
+        self.after = after
+    }
+
+}
+
+/// Manual placement of a preserved scan. Translation is integer millimetres; yaw is degrees. Identity is the default.
+public struct ScanTransform: Codable, Equatable, Sendable {
+    public static let identity = ScanTransform(xMm: 0, yMm: 0, zMm: 0, yawDegrees: 0)
+
+    public var xMm: Int
+    public var yMm: Int
+    public var zMm: Int
+    public var yawDegrees: Int
+
+    public init(xMm: Int, yMm: Int, zMm: Int, yawDegrees: Int) {
+        self.xMm = xMm
+        self.yMm = yMm
+        self.zMm = zMm
+        self.yawDegrees = yawDegrees
+    }
+}
+
+/// Sum of separate floor plans for one selection. Rooms are not unioned, so overlap is counted twice.
+public struct FloorVariant: Codable, Equatable, Sendable, Identifiable {
+    public static let sumLabel = "Suma osobnych planów podłogi"
+    public let id: UUID
+    public let floorIDs: [UUID]
+    public let areaNetMm2: Int
+    public let areaBoughtMm2: Int
+    public let fullBoards: Int
+    public let pieces: Int
+    public let packs: Int?
+
+    public init(id: UUID, floorIDs: [UUID], areaNetMm2: Int, areaBoughtMm2: Int, fullBoards: Int, pieces: Int, packs: Int?) {
+        self.id = id
+        self.floorIDs = floorIDs
+        self.areaNetMm2 = areaNetMm2
+        self.areaBoughtMm2 = areaBoughtMm2
+        self.fullBoards = fullBoards
+        self.pieces = pieces
+        self.packs = packs
+    }
+}
+
+/// Append-only record of a manual scan placement; the previous transform remains available for undo.
+public struct ScanPlacement: Codable, Equatable, Sendable, Identifiable {
+    public let id: UUID
+    public let scanID: UUID
+    public let before: ScanTransform
+    public let after: ScanTransform
+
+    public init(id: UUID, scanID: UUID, before: ScanTransform, after: ScanTransform) {
+        self.id = id
+        self.scanID = scanID
+        self.before = before
+        self.after = after
+    }
+}
+
 @Feature
 public struct Workspace {
     public static let loadFailureMessage = "Nie udało się odczytać projektów. Plik pozostaje bez zmian. Spróbuj ponownie lub odzyskaj go z kopii zapasowej."
@@ -16,17 +148,39 @@ public struct Workspace {
             public var roomPlanJSON: Data?
 
             public var roomPlanStructure: RoomPlanStructureSource?
+            /// Original imported RoomPlan USDZ, preserved independently of derived room geometry.
+            public var sourceUsdz: Data?
+            /// Manual placement. Default is identity and never rewrites source bytes.
+            public var transform: ScanTransform
 
-            public init(id: UUID, label: String, rooms: [CapturedRoom], roomPlanJSON: Data? = nil, roomPlanStructure: RoomPlanStructureSource? = nil) {
+            public init(
+                id: UUID,
+                label: String,
+                rooms: [CapturedRoom],
+                roomPlanJSON: Data? = nil,
+                roomPlanStructure: RoomPlanStructureSource? = nil,
+                sourceUsdz: Data? = nil,
+                transform: ScanTransform = .identity
+            ) {
                 self.label = label
                 self.rooms = rooms
                 self.scanID = id
                 self.roomPlanJSON = roomPlanJSON
                 self.roomPlanStructure = roomPlanStructure
+                self.sourceUsdz = sourceUsdz
+                self.transform = transform
             }
         }
 
+        public enum Action {
+            case setManualPlacementButtonTapped(ScanTransform)
+        }
+
         public init() {}
+
+        public var body: some Feature {
+            Update { _, _ in }
+        }
     }
 
     @Feature
@@ -103,6 +257,15 @@ public struct Workspace {
         public struct State: Equatable, Identifiable, Sendable {
             public var error: String?
             public var floors: [Floor.State]
+            public var geometryCorrections: [GeometryCorrection]
+            public var undoneGeometryCorrectionIDs: [UUID]
+            public var scanPlacements: [ScanPlacement]
+            public var undoneScanPlacementIDs: [UUID]
+            public var floorVariants: [FloorVariant]
+            public var undoneFloorVariantIDs: [UUID]
+            public var walls: [WallSegment]
+            public var utilities: [UtilityRoute]
+            public var furniture: [FurnitureItem]
             public var id: UUID { projectID }
             public var name: String
             public var projectID: UUID
@@ -119,10 +282,28 @@ public struct Workspace {
                 selectedFloorIDs: [UUID] = [],
                 splitAtM: String = "1.500",
                 splitAxis: SplitAxis = .x,
-                error: String? = nil
+                error: String? = nil,
+                geometryCorrections: [GeometryCorrection] = [],
+                undoneGeometryCorrectionIDs: [UUID] = [],
+                scanPlacements: [ScanPlacement] = [],
+                undoneScanPlacementIDs: [UUID] = [],
+                floorVariants: [FloorVariant] = [],
+                undoneFloorVariantIDs: [UUID] = [],
+                walls: [WallSegment] = [],
+                utilities: [UtilityRoute] = [],
+                furniture: [FurnitureItem] = []
             ) {
                 self.error = error
                 self.floors = floors
+                self.geometryCorrections = geometryCorrections
+                self.undoneGeometryCorrectionIDs = undoneGeometryCorrectionIDs
+                self.scanPlacements = scanPlacements
+                self.undoneScanPlacementIDs = undoneScanPlacementIDs
+                self.floorVariants = floorVariants
+                self.undoneFloorVariantIDs = undoneFloorVariantIDs
+                self.walls = walls
+                self.utilities = utilities
+                self.furniture = furniture
                 self.name = name
                 self.projectID = id
                 self.scans = scans
@@ -135,12 +316,52 @@ public struct Workspace {
         public enum Action {
             case scans(Scan.State.ID, Scan.Action)
             case floors(Floor.State.ID, Floor.Action)
+            case undoLastGeometryCorrectionButtonTapped
+            case undoLastScanPlacementButtonTapped
+            case undoLastFloorVariantButtonTapped
         }
 
         public init() {}
 
         public var body: some Feature {
-            Update { _, _ in }
+            Update { state, action in
+                guard case .undoLastGeometryCorrectionButtonTapped = action,
+                      let correction = state.geometryCorrections.last(where: {
+                          !state.undoneGeometryCorrectionIDs.contains($0.id)
+                      }),
+                      correction.after.allSatisfy({ after in
+                          state.floors.contains(where: { $0.id == after.id })
+                      }) else { return }
+                let resultIDs = Set(correction.after.map(\.id))
+                state.floors.removeAll { resultIDs.contains($0.id) }
+                state.floors.append(contentsOf: correction.before.map(\.state))
+                state.undoneGeometryCorrectionIDs.append(correction.id)
+                state.selectedFloorIDs = correction.before.map(\.id)
+                state.error = nil
+            }
+            Update { state, action in
+                switch action {
+                case .scans:
+                    break
+                case .undoLastScanPlacementButtonTapped:
+                    guard let placement = state.scanPlacements.last(where: {
+                        !state.undoneScanPlacementIDs.contains($0.id)
+                    }),
+                          let index = state.scans.firstIndex(where: { $0.id == placement.scanID }),
+                          state.scans[index].transform == placement.after else { return }
+                    state.scans[index].transform = placement.before
+                    state.undoneScanPlacementIDs.append(placement.id)
+                    state.error = nil
+                case .undoLastFloorVariantButtonTapped:
+                    guard let variant = state.floorVariants.last(where: {
+                        !state.undoneFloorVariantIDs.contains($0.id)
+                    }) else { return }
+                    state.undoneFloorVariantIDs.append(variant.id)
+                    state.error = nil
+                default:
+                    break
+                }
+            }
             .forEach(\.floors) {
                 Floor()
             }
@@ -202,6 +423,7 @@ public struct Workspace {
         case appStarted
         case importFailed(String)
         case planFloorButtonTapped(UUID, UUID)
+        case planSelectedFloorsButtonTapped(UUID)
         case proAccessChanged(Bool)
         case retrySaveButtonTapped
         case importUsdz(Data)
@@ -225,7 +447,7 @@ public struct Workspace {
                 case .scanRoomButtonTapped, .roomCaptureFinished, .structureCaptureFinished,
                      .addRoomButtonTapped, .importUsdz, .newProjectButtonTapped,
                      .joinSelectedButtonTapped, .splitSelectedButtonTapped,
-                     .planFloorButtonTapped, .projects:
+                     .planFloorButtonTapped, .planSelectedFloorsButtonTapped, .projects:
                     return
                 default: break
                 }
@@ -367,6 +589,37 @@ public struct Workspace {
                     state.projects[p].floors[f].plan = nil
                     state.projects[p].floors[f].error = error.localizedDescription
                 }
+            case .planSelectedFloorsButtonTapped(let projectID):
+                guard let p = state.projects.firstIndex(where: { $0.id == projectID }) else { return }
+                let selected = state.projects[p].selectedFloorIDs
+                guard !selected.isEmpty else { return }
+                var plans: [(UUID, LayoutPlan)] = []
+                for floorID in selected {
+                    guard let floor = state.projects[p].floors.first(where: { $0.id == floorID }) else { continue }
+                    do {
+                        plans.append((floorID, try floor.makePlan()))
+                    } catch {
+                        state.projects[p].error = error.localizedDescription
+                        return
+                    }
+                }
+                guard !plans.isEmpty else { return }
+                for (floorID, plan) in plans {
+                    guard let f = state.projects[p].floors.firstIndex(where: { $0.id == floorID }) else { continue }
+                    state.projects[p].floors[f].plan = plan
+                    state.projects[p].floors[f].error = nil
+                }
+                let packs = plans.compactMap { $0.1.bom.packs }
+                state.projects[p].floorVariants.append(FloorVariant(
+                    id: uuid(),
+                    floorIDs: plans.map(\.0),
+                    areaNetMm2: plans.reduce(0) { $0 + $1.1.bom.areaNetMm2 },
+                    areaBoughtMm2: plans.reduce(0) { $0 + $1.1.bom.areaBoughtMm2 },
+                    fullBoards: plans.reduce(0) { $0 + $1.1.bom.fullBoards },
+                    pieces: plans.reduce(0) { $0 + $1.1.bom.pieces },
+                    packs: packs.count == plans.count ? packs.reduce(0, +) : nil
+                ))
+                state.projects[p].error = nil
             case .proAccessChanged(let hasPro):
                 state.applyProAccess(hasPro)
             case .importFailed(let message):
@@ -418,7 +671,8 @@ public struct Workspace {
                     let scan = Scan.State(
                         id: uuid(),
                         label: "Skan \(state.projects[index].scans.count + 1)",
-                        rooms: captured.rooms
+                        rooms: captured.rooms,
+                        sourceUsdz: payload
                     )
                     state.projects[index].scans.append(scan)
                     var floorIDs: [UUID] = []
@@ -483,7 +737,14 @@ public struct Workspace {
                     )
                     first.copyMaterial(from: original)
                     second.copyMaterial(from: original)
+                    let correction = GeometryCorrection(
+                        id: uuid(),
+                        operation: .split(axis: state.projects[index].splitAxis, atMm: atMm),
+                        before: [FloorSnapshot(original)],
+                        after: [FloorSnapshot(first), FloorSnapshot(second)]
+                    )
                     state.projects[index].floors.replaceSubrange(floorIndex...floorIndex, with: [first, second])
+                    state.projects[index].geometryCorrections.append(correction)
                     state.projects[index].selectedFloorIDs = [first.floorID]
                     state.projects[index].error = nil
                 } catch {
@@ -496,6 +757,7 @@ public struct Workspace {
                 guard selected.count == 2 else { return }
                 do {
                     let joined = try joinRooms(selected[0].room, selected[1].room)
+                    let inputs = selected.map(FloorSnapshot.init)
                     var item = Floor.State(
                         id: uuid(),
                         name: selected[0].name,
@@ -508,13 +770,29 @@ public struct Workspace {
                         accessID: selected[0].accessID == selected[1].accessID ? selected[0].accessID : nil
                     )
                     item.copyMaterial(from: selected[0])
+                    let correction = GeometryCorrection(
+                        id: uuid(),
+                        operation: .join,
+                        before: inputs,
+                        after: [FloorSnapshot(item)]
+                    )
                     state.projects[index].floors.removeAll { selectedIDs.contains($0.floorID) }
                     state.projects[index].floors.append(item)
+                    state.projects[index].geometryCorrections.append(correction)
                     state.projects[index].selectedFloorIDs = [item.floorID]
                     state.projects[index].error = nil
                 } catch {
                     state.projects[index].error = error.localizedDescription
                 }
+            case .projects(let projectID, .scans(let scanID, .setManualPlacementButtonTapped(let transform))):
+                guard let project = state.projects.firstIndex(where: { $0.id == projectID }),
+                      let index = state.projects[project].scans.firstIndex(where: { $0.id == scanID }) else { return }
+                let before = state.projects[project].scans[index].transform
+                guard before != transform else { return }
+                let placement = ScanPlacement(id: uuid(), scanID: scanID, before: before, after: transform)
+                state.projects[project].scans[index].transform = transform
+                state.projects[project].scanPlacements.append(placement)
+                state.projects[project].error = nil
             case .projects:
                 break
             }

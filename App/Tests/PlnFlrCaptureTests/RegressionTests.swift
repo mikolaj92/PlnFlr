@@ -43,8 +43,15 @@ import Testing
     second.floorID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
     second.name = "Salon B"
     second.room = parts.1!
+    let correction = GeometryCorrection(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+        operation: .split(axis: .x, atMm: 1500),
+        before: [FloorSnapshot(floor)],
+        after: [FloorSnapshot(first), FloorSnapshot(second)]
+    )
     await store.send(.splitSelectedButtonTapped) {
         $0.projects[0].floors = [snap(first), snap(second)]
+        $0.projects[0].geometryCorrections = [correction]
         $0.projects[0].selectedFloorIDs = [first.id]
     }
     let expected = try second.makePlan()
