@@ -38,6 +38,9 @@ ICON_ADD = (
 
 
 def platform_config(*, rooms: Sequence[SavedRoom] = (), current_path: str = "") -> PlatformConfig:
+    if not isinstance(current_path, str):
+        raise ValueError("current_path must be a string")
+    room_ids: set[str] = set()
     for room in rooms:
         if (
             not isinstance(room.id, str)
@@ -45,6 +48,9 @@ def platform_config(*, rooms: Sequence[SavedRoom] = (), current_path: str = "") 
             or room.id == "new"
         ):
             raise ValueError("room id must be a non-empty URL-safe path segment other than 'new'")
+        if room.id in room_ids:
+            raise ValueError("room ids must be unique")
+        room_ids.add(room.id)
     room_items = tuple(
         MenuItem(
             label=room.name,
