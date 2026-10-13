@@ -11,23 +11,16 @@ from app_factory.platform import (
     PlatformConfig,
     PlatformLocale,
     PlatformPaths,
-    apply_platform_context,
     build_platform_context,
 )
-from jinja2 import Environment
 
 from plnflr.rooms import SavedRoom
 
 APP_NAME: Final = "PlnFlr"
 DEFAULT_LOCALE: Final = "pl"
 
-_PATHS: Final = PlatformPaths(
-    login="/",
-    logout="/",
-    register="/",
-    account="/",
-    admin_users="/",
-)
+# Use the pinned kit's lifecycle contract; handlers require identity bindings.
+_PATHS: Final = PlatformPaths()
 
 _LOCALES: Final = (PlatformLocale(code="pl", label="PL"),)
 
@@ -85,12 +78,6 @@ def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
 
 
 PLATFORM_CONFIG: Final = platform_config()
-
-
-def install_platform_chrome(environments: list[Environment]) -> PlatformConfig:
-    for environment in environments:
-        apply_platform_context(environment, PLATFORM_CONFIG)
-    return PLATFORM_CONFIG
 
 
 def platform_request_context(

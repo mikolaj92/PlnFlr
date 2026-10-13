@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import uvicorn
-from app_factory.fastapi import install_app_factory_ui
+from app_factory.adapters import install_identity_adapters
 from app_factory.responses import htmx_redirect
 from app_factory.uploads import UploadLimitExceeded, read_upload_bounded
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -18,7 +18,7 @@ from pydantic import ValidationError
 
 from plnflr.forms import layout_form_from_request, layout_from_form
 from plnflr.importing.roomplan import room_from_usdz
-from plnflr.platform_chrome import install_platform_chrome, platform_request_context
+from plnflr.platform_chrome import PLATFORM_CONFIG, platform_request_context
 from plnflr.render.svg import plan_to_svg
 from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
 
@@ -29,9 +29,10 @@ SCAN_MAX_BYTES = 8 * 1024 * 1024
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 
 app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None)
-install_app_factory_ui(app, environments=(templates.env,))
+# Identity persistence/policy is not configured in this open-user host yet.
+# Compose kit chrome once; keep its mount before the product /static mount.
+install_identity_adapters(app, environments=(templates.env,), config=PLATFORM_CONFIG)
 app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
-install_platform_chrome([templates.env])
 
 
 def _net_m2(area_mm2: int) -> str:
