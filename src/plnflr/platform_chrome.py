@@ -1,9 +1,10 @@
-"""Product shell chrome: paths, menu, and per-request platform context."""
+"""Product shell configuration: paths, locale, and room navigation."""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Final
 
 from app_factory.platform import (
     MenuGroup,
@@ -11,23 +12,15 @@ from app_factory.platform import (
     PlatformConfig,
     PlatformLocale,
     PlatformPaths,
-    apply_platform_context,
-    build_platform_context,
 )
-from jinja2 import Environment
 
 from plnflr.rooms import SavedRoom
 
 APP_NAME: Final = "PlnFlr"
 DEFAULT_LOCALE: Final = "pl"
 
-_PATHS: Final = PlatformPaths(
-    login="/",
-    logout="/",
-    register="/",
-    account="/",
-    admin_users="/",
-)
+# Use the pinned kit's lifecycle contract; handlers require identity bindings.
+_PATHS: Final = PlatformPaths()
 
 _LOCALES: Final = (PlatformLocale(code="pl", label="PL"),)
 
@@ -44,13 +37,31 @@ ICON_ADD = (
 )
 
 
-def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
+def platform_config(*, rooms: Sequence[SavedRoom] = (), current_path: str = "") -> PlatformConfig:
+    if not isinstance(current_path, str):
+        raise ValueError("current_path must be a string")
+    room_ids: set[str] = set()
+    for room in rooms:
+        if (
+            not isinstance(room.id, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]+", room.id)
+            or room.id == "new"
+        ):
+            raise ValueError("room id must be a non-empty URL-safe path segment other than 'new'")
+        if room.id in room_ids:
+            raise ValueError("room ids must be unique")
+        room_ids.add(room.id)
+        if not isinstance(room.name, str) or not room.name.strip():
+            raise ValueError("room name must be a non-empty string")
     room_items = tuple(
         MenuItem(
             label=room.name,
             href=f"/rooms/{room.id}",
             icon=ICON_ROOM,
             key=room.id,
+            active=(
+                current_path == f"/rooms/{room.id}" or current_path.startswith(f"/rooms/{room.id}/")
+            ),
             no_htmx=True,
         )
         for room in rooms
@@ -70,6 +81,7 @@ def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
                         href="/rooms/new",
                         icon=ICON_ADD,
                         key="new-room",
+                        active=current_path == "/rooms/new",
                         no_htmx=True,
                     ),
                 ),
@@ -85,25 +97,3 @@ def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
 
 
 PLATFORM_CONFIG: Final = platform_config()
-
-
-def install_platform_chrome(environments: list[Environment]) -> PlatformConfig:
-    for environment in environments:
-        apply_platform_context(environment, PLATFORM_CONFIG)
-    return PLATFORM_CONFIG
-
-
-def platform_request_context(
-    *,
-    current_path: str = "",
-    rooms: Sequence[SavedRoom] = (),
-) -> dict[str, Any]:
-    ctx = build_platform_context(
-        platform_config(rooms=rooms),
-        user=None,
-        current_path=current_path,
-        locales=_LOCALES,
-        locale=DEFAULT_LOCALE,
-    )
-    ctx["lang"] = DEFAULT_LOCALE
-    return ctx

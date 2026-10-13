@@ -2,6 +2,7 @@ import re
 from inspect import signature
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from plnflr.forms import LayoutForm, parse_vertices, room_from_form, rules_from_form
@@ -24,7 +25,14 @@ def test_home_uses_platform_assets_not_cdn() -> None:
     assert "Pokój 1" in response.text
 
 
-def test_healthz() -> None:
+def test_healthz(monkeypatch) -> None:
+    with monkeypatch.context() as missing_identity:
+        missing_identity.delattr(app.state, "app_factory_identity")
+        with (
+            pytest.raises(RuntimeError, match="missing passkey_ui, usermanager_ui"),
+            TestClient(app),
+        ):
+            pass
     with TestClient(app) as client:
         response = client.get("/healthz")
     assert response.status_code == 200

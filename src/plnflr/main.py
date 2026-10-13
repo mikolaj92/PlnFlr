@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated
 
 import uvicorn
-from app_factory.fastapi import install_app_factory_ui
+from app_factory.adapters import install_identity_adapters
 from app_factory.responses import htmx_redirect
 from app_factory.uploads import UploadLimitExceeded, read_upload_bounded
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -17,8 +18,9 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from plnflr.forms import layout_form_from_request, layout_from_form
+from plnflr.identity import require_identity
 from plnflr.importing.roomplan import room_from_usdz
-from plnflr.platform_chrome import install_platform_chrome, platform_request_context
+from plnflr.platform_chrome import PLATFORM_CONFIG, platform_config
 from plnflr.render.svg import plan_to_svg
 from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
 
@@ -28,24 +30,38 @@ ROOM_STORE = RoomStore(DATA_DIR / "rooms.json")
 SCAN_MAX_BYTES = 8 * 1024 * 1024
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 
-app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None)
-install_app_factory_ui(app, environments=(templates.env,))
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    require_identity(application)
+    yield
+
+
+app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None, lifespan=lifespan)
+# Compose kit chrome once; keep its mount before the product /static mount.
+install_identity_adapters(
+    app,
+    environments=(templates.env,),
+    config=PLATFORM_CONFIG,
+    locales=lambda request: (PLATFORM_CONFIG.locales, PLATFORM_CONFIG.default_locale),
+)
 app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
-install_platform_chrome([templates.env])
 
 
 def _net_m2(area_mm2: int) -> str:
     return f"{(Decimal(area_mm2) / Decimal(1_000_000)).quantize(Decimal('0.001'))}"
 
 
-def _ctx(path: str, rooms: list[SavedRoom] | None = None) -> dict:
+def _ctx(request: Request, rooms: list[SavedRoom] | None = None) -> dict:
     listed = rooms if rooms is not None else ROOM_STORE.list_for_user(OPEN_USER_ID)
-    return platform_request_context(current_path=path, rooms=listed)
+    context = dict(request.state.app_factory_platform_context)
+    context["platform_menu"] = platform_config(rooms=listed, current_path=request.url.path).menu
+    context["lang"] = context["platform_locale"]
+    return context
 
 
 def _error_fragment(request: Request, message: str, status: int = 400) -> HTMLResponse:
     html = templates.get_template("partials/error.html").render(
-        {**_ctx("/"), "request": request, "error": message}
+        {**_ctx(request), "request": request, "error": message}
     )
     return HTMLResponse(html, status_code=status)
 
@@ -71,7 +87,7 @@ def new_room(request: Request):
             "request": request,
             "page_title": "Nowy pokój",
             "nav_active": "new-room",
-            **_ctx("/rooms/new", rooms),
+            **_ctx(request, rooms),
         },
     )
 
@@ -100,7 +116,7 @@ def show_room(request: Request, room_id: str):
             "room": room,
             "form": form,
             "scan_max_bytes": SCAN_MAX_BYTES,
-            **_ctx(f"/rooms/{room.id}", rooms),
+            **_ctx(request, rooms),
         },
     )
 
@@ -154,7 +170,7 @@ async def plan_room(request: Request, room_id: str):
     svg = plan_to_svg(laid)
     html = templates.get_template("partials/plan.html").render(
         {
-            **_ctx(f"/rooms/{saved.id}"),
+            **_ctx(request),
             "request": request,
             "plan": laid,
             "svg": svg,
@@ -172,4 +188,5 @@ async def plan_legacy(request: Request):
 
 
 def main() -> None:
+    require_identity(app)
     uvicorn.run("plnflr.main:app", host="0.0.0.0", port=8004, reload=False)
