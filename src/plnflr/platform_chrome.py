@@ -39,8 +39,12 @@ ICON_ADD = (
 
 def platform_config(*, rooms: Sequence[SavedRoom] = (), current_path: str = "") -> PlatformConfig:
     for room in rooms:
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", room.id):
-            raise ValueError("room id must be a non-empty URL-safe path segment")
+        if (
+            not isinstance(room.id, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]+", room.id)
+            or room.id == "new"
+        ):
+            raise ValueError("room id must be a non-empty URL-safe path segment other than 'new'")
     room_items = tuple(
         MenuItem(
             label=room.name,
