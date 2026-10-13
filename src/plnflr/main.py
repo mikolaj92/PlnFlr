@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated
@@ -17,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from plnflr.forms import layout_form_from_request, layout_from_form
+from plnflr.identity import require_identity
 from plnflr.importing.roomplan import room_from_usdz
 from plnflr.platform_chrome import PLATFORM_CONFIG, platform_config
 from plnflr.render.svg import plan_to_svg
@@ -28,9 +30,13 @@ ROOM_STORE = RoomStore(DATA_DIR / "rooms.json")
 SCAN_MAX_BYTES = 8 * 1024 * 1024
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 
-app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None)
-# Identity persistence/policy is not configured in this open-user host yet.
-# Keep chrome available to embedded callers; the CLI refuses incomplete identity.
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    require_identity(application)
+    yield
+
+
+app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None, lifespan=lifespan)
 # Compose kit chrome once; keep its mount before the product /static mount.
 install_identity_adapters(
     app,
@@ -182,12 +188,5 @@ async def plan_legacy(request: Request):
 
 
 def main() -> None:
-    identity = app.state.app_factory_identity
-    if identity.passkey_ui is None or identity.usermanager_ui is None:
-        raise RuntimeError(
-            "Python host identity is not configured: both passkey and usermanager "
-            "adapters are required. Configure durable account storage, session hooks "
-            "and secret, registration/activation/recovery and administrator policies, "
-            "and passkey RP ID/origins before starting the CLI."
-        )
+    require_identity(app)
     uvicorn.run("plnflr.main:app", host="0.0.0.0", port=8004, reload=False)
