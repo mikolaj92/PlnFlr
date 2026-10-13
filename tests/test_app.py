@@ -28,9 +28,11 @@ def test_home_uses_platform_assets_not_cdn() -> None:
 def test_healthz(monkeypatch) -> None:
     with monkeypatch.context() as missing_identity:
         missing_identity.delattr(app.state, "app_factory_identity")
-        with pytest.raises(RuntimeError, match="missing passkey_ui, usermanager_ui"):
-            with TestClient(app):
-                pass
+        with (
+            pytest.raises(RuntimeError, match="missing passkey_ui, usermanager_ui"),
+            TestClient(app),
+        ):
+            pass
     with TestClient(app) as client:
         response = client.get("/healthz")
     assert response.status_code == 200
