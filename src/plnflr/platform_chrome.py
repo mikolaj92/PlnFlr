@@ -1,9 +1,9 @@
-"""Product shell chrome: paths, menu, and per-request platform context."""
+"""Product shell configuration: paths, locale, and room navigation."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Final
 
 from app_factory.platform import (
     MenuGroup,
@@ -11,7 +11,6 @@ from app_factory.platform import (
     PlatformConfig,
     PlatformLocale,
     PlatformPaths,
-    build_platform_context,
 )
 
 from plnflr.rooms import SavedRoom
@@ -37,13 +36,16 @@ ICON_ADD = (
 )
 
 
-def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
+def platform_config(*, rooms: Sequence[SavedRoom] = (), current_path: str = "") -> PlatformConfig:
     room_items = tuple(
         MenuItem(
             label=room.name,
             href=f"/rooms/{room.id}",
             icon=ICON_ROOM,
             key=room.id,
+            active=(
+                current_path == f"/rooms/{room.id}" or current_path.startswith(f"/rooms/{room.id}/")
+            ),
             no_htmx=True,
         )
         for room in rooms
@@ -63,6 +65,7 @@ def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
                         href="/rooms/new",
                         icon=ICON_ADD,
                         key="new-room",
+                        active=current_path == "/rooms/new",
                         no_htmx=True,
                     ),
                 ),
@@ -78,19 +81,3 @@ def platform_config(*, rooms: Sequence[SavedRoom] = ()) -> PlatformConfig:
 
 
 PLATFORM_CONFIG: Final = platform_config()
-
-
-def platform_request_context(
-    *,
-    current_path: str = "",
-    rooms: Sequence[SavedRoom] = (),
-) -> dict[str, Any]:
-    ctx = build_platform_context(
-        platform_config(rooms=rooms),
-        user=None,
-        current_path=current_path,
-        locales=_LOCALES,
-        locale=DEFAULT_LOCALE,
-    )
-    ctx["lang"] = DEFAULT_LOCALE
-    return ctx
