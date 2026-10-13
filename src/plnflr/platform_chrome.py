@@ -51,6 +51,8 @@ def platform_config(*, rooms: Sequence[SavedRoom] = (), current_path: str = "") 
         if room.id in room_ids:
             raise ValueError("room ids must be unique")
         room_ids.add(room.id)
+        if not isinstance(room.name, str) or not room.name.strip():
+            raise ValueError("room name must be a non-empty string")
     room_items = tuple(
         MenuItem(
             label=room.name,
