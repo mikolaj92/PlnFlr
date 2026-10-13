@@ -30,6 +30,7 @@ templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 
 app = FastAPI(title="PlnFlr", docs_url=None, redoc_url=None)
 # Identity persistence/policy is not configured in this open-user host yet.
+# Keep chrome available to embedded callers; the CLI refuses incomplete identity.
 # Compose kit chrome once; keep its mount before the product /static mount.
 install_identity_adapters(
     app,
@@ -181,4 +182,12 @@ async def plan_legacy(request: Request):
 
 
 def main() -> None:
+    identity = app.state.app_factory_identity
+    if identity.passkey_ui is None or identity.usermanager_ui is None:
+        raise RuntimeError(
+            "Python host identity is not configured: both passkey and usermanager "
+            "adapters are required. Configure durable account storage, session hooks "
+            "and secret, registration/activation/recovery and administrator policies, "
+            "and passkey RP ID/origins before starting the CLI."
+        )
     uvicorn.run("plnflr.main:app", host="0.0.0.0", port=8004, reload=False)
