@@ -226,7 +226,7 @@ def test_roomplan_rejects_empty_zip() -> None:
 
 
 def test_room_page_uses_factory_file_upload(isolated_room_store) -> None:
-    room = isolated_room_store.ensure_default("local")
+    room = isolated_room_store.ensure_default("test-account")
     with TestClient(app) as client:
         response = client.get(f"/rooms/{room.id}")
     assert response.status_code == 200
@@ -239,7 +239,7 @@ def test_room_page_uses_factory_file_upload(isolated_room_store) -> None:
 
 
 def test_upload_usdz_fills_polygon_and_doors(isolated_room_store) -> None:
-    room = isolated_room_store.ensure_default("local")
+    room = isolated_room_store.ensure_default("test-account")
     with TestClient(app) as client:
         response = client.post(
             f"/rooms/{room.id}/scan",
@@ -250,7 +250,7 @@ def test_upload_usdz_fills_polygon_and_doors(isolated_room_store) -> None:
     assert "0,0" in response.text
     assert "4.000,0" in response.text or "4.000,0.000" in response.text
     assert 'value="polygon"' in response.text or "shape === 'polygon'" in response.text
-    saved = isolated_room_store.get(room.id, user_id="local")
+    saved = isolated_room_store.get(room.id, user_id="test-account")
     assert saved is not None
     assert saved.form["shape"] == "polygon"
     assert "0,0" in saved.form["vertices"]
@@ -260,7 +260,7 @@ def test_upload_usdz_fills_polygon_and_doors(isolated_room_store) -> None:
 
 
 def test_htmx_scan_redirects_full_page(isolated_room_store) -> None:
-    room = isolated_room_store.ensure_default("local")
+    room = isolated_room_store.ensure_default("test-account")
     with TestClient(app) as client:
         response = client.post(
             f"/rooms/{room.id}/scan",
@@ -274,14 +274,14 @@ def test_htmx_scan_redirects_full_page(isolated_room_store) -> None:
 
 def test_oversized_scan_is_rejected(isolated_room_store, monkeypatch) -> None:
     monkeypatch.setattr("plnflr.main.SCAN_MAX_BYTES", 64)
-    room = isolated_room_store.ensure_default("local")
+    room = isolated_room_store.ensure_default("test-account")
     with TestClient(app) as client:
         response = client.post(
             f"/rooms/{room.id}/scan",
             files={"scan": ("salon.usdz", make_salon_usdz(), "model/vnd.usdz+zip")},
         )
     assert response.status_code == 413
-    saved = isolated_room_store.get(room.id, user_id="local")
+    saved = isolated_room_store.get(room.id, user_id="test-account")
     assert saved is not None
     assert saved.form["shape"] != "polygon"
 
@@ -291,9 +291,9 @@ _SCAN2 = Path("/Users/mini-m4-0/usdz/Scan 2.usdz")
 
 @pytest.mark.skipif(not _SCAN2.exists(), reason="investment scan not on this machine")
 def test_upload_scan2_keeps_material_and_cuts_doors(isolated_room_store) -> None:
-    room = isolated_room_store.ensure_default("local")
+    room = isolated_room_store.ensure_default("test-account")
     isolated_room_store.update_form(
-        room.id, user_id="local", form={"angle_deg": "15", "kind": "plank"}
+        room.id, user_id="test-account", form={"angle_deg": "15", "kind": "plank"}
     )
     with TestClient(app) as client:
         response = client.post(
@@ -301,7 +301,7 @@ def test_upload_scan2_keeps_material_and_cuts_doors(isolated_room_store) -> None
             files={"scan": ("Scan 2.usdz", _SCAN2.read_bytes(), "model/vnd.usdz+zip")},
             follow_redirects=True,
         )
-        saved = isolated_room_store.get(room.id, user_id="local")
+        saved = isolated_room_store.get(room.id, user_id="test-account")
         assert saved is not None
         assert saved.form["shape"] == "polygon"
         assert saved.form["angle_deg"] == "15"
@@ -316,13 +316,13 @@ def test_upload_scan2_keeps_material_and_cuts_doors(isolated_room_store) -> None
 
 
 def test_plan_from_imported_doors_lists_threshold_strip(isolated_room_store) -> None:
-    room = isolated_room_store.ensure_default("local")
+    room = isolated_room_store.ensure_default("test-account")
     with TestClient(app) as client:
         client.post(
             f"/rooms/{room.id}/scan",
             files={"scan": ("salon.usdz", make_salon_usdz(), "model/vnd.usdz+zip")},
         )
-        saved = isolated_room_store.get(room.id, user_id="local")
+        saved = isolated_room_store.get(room.id, user_id="test-account")
         assert saved is not None
         response = client.post(f"/rooms/{room.id}/plan", data=saved.form)
     assert response.status_code == 200

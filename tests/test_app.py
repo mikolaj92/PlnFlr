@@ -10,8 +10,8 @@ from plnflr.main import app, plan_legacy, plan_room
 
 
 def test_plan_routes_do_not_duplicate_layout_field_parameters() -> None:
-    assert list(signature(plan_room).parameters) == ["request", "room_id"]
-    assert list(signature(plan_legacy).parameters) == ["request"]
+    assert list(signature(plan_room).parameters) == ["request", "room_id", "user_id"]
+    assert list(signature(plan_legacy).parameters) == ["request", "user_id"]
 
 
 def test_home_uses_platform_assets_not_cdn() -> None:

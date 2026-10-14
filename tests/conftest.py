@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 from app_factory.adapters import PasskeyBinding, UserManagerBinding, install_identity_adapters
+from app_factory.platform import PlatformUser
 from fastapi import HTTPException
 from my_auth.fastapi import PasskeyRouteHooks
 from my_usermanager.adapters.fastapi_htmx.standard import StandardUserManagerUiHooks
@@ -20,13 +21,16 @@ from plnflr.rooms import RoomStore
 def isolated_room_store(tmp_path, monkeypatch) -> Iterator[RoomStore]:
     store = RoomStore(tmp_path / "rooms.json")
     monkeypatch.setattr("plnflr.main.ROOM_STORE", store)
-    # Product route tests need configured identity, without enabling account policy.
+    # Product route tests run as an authenticated account, not the legacy local owner.
     denied = Mock(side_effect=HTTPException(status_code=403))
     with identity_services({
         "PLNFLR_IDENTITY_DATABASE": str(tmp_path / "identity.sqlite"),
         "PLNFLR_PASSKEY_RP_ID": "testserver",
         "PLNFLR_PASSKEY_ORIGINS": "https://testserver",
     }) as services:
+        # Replace the bootstrap locale-only context with this account's context.
+        monkeypatch.setattr(app, "user_middleware", [])
+        monkeypatch.setattr(app, "middleware_stack", None)
         monkeypatch.setattr(app.router, "routes", list(app.router.routes))
         monkeypatch.setattr(app, "state", State(dict(app.state._state)))
         monkeypatch.delattr(app.state, "app_factory_identity")
@@ -35,6 +39,9 @@ def isolated_room_store(tmp_path, monkeypatch) -> Iterator[RoomStore]:
             app,
             environments=(templates.env,),
             config=PLATFORM_CONFIG,
+            current_user=lambda request: PlatformUser(
+                display_name="Test account", user_id="test-account"
+            ),
             passkey=PasskeyBinding(
                 service=services.passkey,
                 hooks=PasskeyRouteHooks(
