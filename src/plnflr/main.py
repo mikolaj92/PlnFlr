@@ -43,6 +43,7 @@ install_identity_adapters(
     app,
     environments=(templates.env,),
     config=PLATFORM_CONFIG,
+    locales=lambda request: (PLATFORM_CONFIG.locales, PLATFORM_CONFIG.default_locale),
 )
 app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
 

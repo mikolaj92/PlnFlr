@@ -28,7 +28,8 @@ def isolated_room_store(tmp_path, monkeypatch) -> Iterator[RoomStore]:
         "PLNFLR_PASSKEY_RP_ID": "testserver",
         "PLNFLR_PASSKEY_ORIGINS": "https://testserver",
     }) as services:
-        monkeypatch.setattr(app, "user_middleware", list(app.user_middleware))
+        # Replace the bootstrap locale-only context with this account's context.
+        monkeypatch.setattr(app, "user_middleware", [])
         monkeypatch.setattr(app, "middleware_stack", None)
         monkeypatch.setattr(app.router, "routes", list(app.router.routes))
         monkeypatch.setattr(app, "state", State(dict(app.state._state)))
