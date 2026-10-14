@@ -1,4 +1,4 @@
-"""Named rooms for the open user. Later each account gets its own list."""
+"""Named rooms stored and selected by their account owner."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-OPEN_USER_ID = "local"
 
 
 def default_form() -> dict[str, str]:

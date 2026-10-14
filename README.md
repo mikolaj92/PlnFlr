@@ -76,7 +76,9 @@ swift test --package-path App
 swift run --package-path App PlnFlrApp
 ```
 
-v0.1: lista pokoi jednego otwartego użytkownika. User podaje obrys, kąt i ewentualną podziałkę (np. pół kafelki, pół panele) albo wgrywa skan RoomPlan (USDZ). Serwer liczy dylatację, siatkę, docinki, odcięcia na progach (listwa), BOM i kolejność. Bez kont.
+Host Python udostępnia pokoje wyłącznie właścicielowi wskazanemu przez sesję adaptera (`PlatformUser.user_id`). Gość jest przekierowywany do logowania bez odczytu i zapisu pokojów. Historyczne dane `local` pozostają w magazynie i nie są przypisywane kontom. Host wymaga konfiguracji adapterów tożsamości oraz mapowania zweryfikowanej sesji przez `current_user`; bez niego trasy pokojów odmawiają dostępu.
+
+Użytkownik podaje obrys, kąt i podziałkę (np. pół kafelki, pół panele) albo wgrywa skan RoomPlan (USDZ). Serwer liczy dylatację, siatkę, docinki, odcięcia na progach (listwa), BOM i kolejność.
 
 ## Native app (local)
 

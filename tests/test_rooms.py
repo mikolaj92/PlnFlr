@@ -15,9 +15,9 @@ def test_home_redirects_to_default_room(tmp_path, monkeypatch) -> None:
 
 def test_two_rooms_are_independent(tmp_path, monkeypatch) -> None:
     store = RoomStore(tmp_path / "rooms.json")
-    first = store.create(user_id="local", name="Salon")
+    first = store.create(user_id="test-account", name="Salon")
     second = store.create(
-        user_id="local",
+        user_id="test-account",
         name="Kuchnia",
         form={"width_m": "5.500", "height_m": "2.400"},
     )
@@ -42,7 +42,7 @@ def test_create_room_from_form(tmp_path, monkeypatch) -> None:
     assert response.status_code == 303
     location = response.headers["location"]
     assert location.startswith("/rooms/")
-    created = store.get(location.rsplit("/", 1)[-1], user_id="local")
+    created = store.get(location.rsplit("/", 1)[-1], user_id="test-account")
     assert created is not None
     assert created.name == "Łazienka"
 

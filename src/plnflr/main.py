@@ -9,9 +9,10 @@ from typing import Annotated
 
 import uvicorn
 from app_factory.adapters import install_identity_adapters
+from app_factory.platform import PlatformUser
 from app_factory.responses import htmx_redirect
 from app_factory.uploads import UploadLimitExceeded, read_upload_bounded
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,7 +23,7 @@ from plnflr.identity import require_identity
 from plnflr.importing.roomplan import room_from_usdz
 from plnflr.platform_chrome import PLATFORM_CONFIG, platform_config
 from plnflr.render.svg import plan_to_svg
-from plnflr.rooms import OPEN_USER_ID, RoomStore, SavedRoom, default_form
+from plnflr.rooms import RoomStore, SavedRoom, default_form
 
 PACKAGE_DIR = Path(__file__).parent
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -42,7 +43,6 @@ install_identity_adapters(
     app,
     environments=(templates.env,),
     config=PLATFORM_CONFIG,
-    locales=lambda request: (PLATFORM_CONFIG.locales, PLATFORM_CONFIG.default_locale),
 )
 app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
 
@@ -51,8 +51,28 @@ def _net_m2(area_mm2: int) -> str:
     return f"{(Decimal(area_mm2) / Decimal(1_000_000)).quantize(Decimal('0.001'))}"
 
 
+def _room_user_id(request: Request) -> str:
+    """Trust only the adapter's server-side session view, never request fields."""
+    context = getattr(request.state, "app_factory_platform_context", {})
+    user = context.get("platform_user")
+    if (
+        not isinstance(user, PlatformUser)
+        or not isinstance(user.user_id, str)
+        or not user.user_id.strip()
+        or user.user_id == "local"
+    ):
+        login = PLATFORM_CONFIG.paths.href("login")
+        raise HTTPException(
+            status_code=303, headers={"Location": login, "HX-Redirect": login}
+        )
+    return user.user_id
+
+
+RoomUserId = Annotated[str, Depends(_room_user_id)]
+
+
 def _ctx(request: Request, rooms: list[SavedRoom] | None = None) -> dict:
-    listed = rooms if rooms is not None else ROOM_STORE.list_for_user(OPEN_USER_ID)
+    listed = rooms if rooms is not None else ROOM_STORE.list_for_user(_room_user_id(request))
     context = dict(request.state.app_factory_platform_context)
     context["platform_menu"] = platform_config(rooms=listed, current_path=request.url.path).menu
     context["lang"] = context["platform_locale"]
@@ -72,14 +92,14 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/")
-def home() -> RedirectResponse:
-    room = ROOM_STORE.ensure_default(OPEN_USER_ID)
+def home(user_id: RoomUserId) -> RedirectResponse:
+    room = ROOM_STORE.ensure_default(user_id)
     return RedirectResponse(f"/rooms/{room.id}", status_code=303)
 
 
 @app.get("/rooms/new")
-def new_room(request: Request):
-    rooms = ROOM_STORE.list_for_user(OPEN_USER_ID)
+def new_room(request: Request, user_id: RoomUserId):
+    rooms = ROOM_STORE.list_for_user(user_id)
     return templates.TemplateResponse(
         request,
         "new_room.html",
@@ -93,15 +113,15 @@ def new_room(request: Request):
 
 
 @app.post("/rooms")
-def create_room(name: str = Form("")) -> RedirectResponse:
-    room = ROOM_STORE.create(OPEN_USER_ID, name)
+def create_room(user_id: RoomUserId, name: str = Form("")) -> RedirectResponse:
+    room = ROOM_STORE.create(user_id, name)
     return RedirectResponse(f"/rooms/{room.id}", status_code=303)
 
 
 @app.get("/rooms/{room_id}")
-def show_room(request: Request, room_id: str):
-    rooms = ROOM_STORE.list_for_user(OPEN_USER_ID)
-    room = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
+def show_room(request: Request, room_id: str, user_id: RoomUserId):
+    rooms = ROOM_STORE.list_for_user(user_id)
+    room = ROOM_STORE.get(room_id, user_id=user_id)
     if room is None:
         return RedirectResponse("/", status_code=303)
     form = default_form()
@@ -125,9 +145,10 @@ def show_room(request: Request, room_id: str):
 async def import_scan(
     request: Request,
     room_id: str,
+    user_id: RoomUserId,
     scan: Annotated[UploadFile, File()],
 ):
-    saved = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
+    saved = ROOM_STORE.get(room_id, user_id=user_id)
     if saved is None:
         return htmx_redirect(request, "/")
     try:
@@ -152,13 +173,13 @@ async def import_scan(
             "window_segments": captured.window_segments,
         }
     )
-    ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=form)
+    ROOM_STORE.update_form(room_id, user_id=user_id, form=form)
     return htmx_redirect(request, f"/rooms/{saved.id}")
 
 
 @app.post("/rooms/{room_id}/plan")
-async def plan_room(request: Request, room_id: str):
-    saved = ROOM_STORE.get(room_id, user_id=OPEN_USER_ID)
+async def plan_room(request: Request, room_id: str, user_id: RoomUserId):
+    saved = ROOM_STORE.get(room_id, user_id=user_id)
     if saved is None:
         return _error_fragment(request, "Nie ma takiego pokoju.", status=404)
     try:
@@ -166,7 +187,7 @@ async def plan_room(request: Request, room_id: str):
         laid = layout_from_form(form)
     except (ValueError, ValidationError, InvalidOperation) as exc:
         return _error_fragment(request, str(exc) or "Niepoprawne wymiary.")
-    ROOM_STORE.update_form(room_id, user_id=OPEN_USER_ID, form=form.model_dump())
+    ROOM_STORE.update_form(room_id, user_id=user_id, form=form.model_dump())
     svg = plan_to_svg(laid)
     html = templates.get_template("partials/plan.html").render(
         {
@@ -182,9 +203,9 @@ async def plan_room(request: Request, room_id: str):
 
 
 @app.post("/plan")
-async def plan_legacy(request: Request):
-    room = ROOM_STORE.ensure_default(OPEN_USER_ID)
-    return await plan_room(request, room.id)
+async def plan_legacy(request: Request, user_id: RoomUserId):
+    room = ROOM_STORE.ensure_default(user_id)
+    return await plan_room(request, room.id, user_id)
 
 
 def main() -> None:
