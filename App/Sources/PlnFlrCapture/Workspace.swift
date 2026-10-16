@@ -155,6 +155,20 @@ public struct ScanPlacement: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+public struct ModelPart: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var scanID: UUID
+    public var nodePaths: [String]
+
+    public init(id: UUID, name: String, scanID: UUID, nodePaths: [String]) {
+        self.id = id
+        self.name = name
+        self.scanID = scanID
+        self.nodePaths = nodePaths
+    }
+}
+
 @Feature
 public struct Workspace {
     public static let loadFailureMessage = "Nie udało się odczytać projektów. Plik pozostaje bez zmian. Spróbuj ponownie lub odzyskaj go z kopii zapasowej."
@@ -287,6 +301,7 @@ public struct Workspace {
             public var walls: [WallSegment]
             public var utilities: [UtilityRoute]
             public var furniture: [FurnitureItem]
+            public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
             public var projectID: UUID
@@ -312,7 +327,8 @@ public struct Workspace {
                 undoneFloorVariantIDs: [UUID] = [],
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
-                furniture: [FurnitureItem] = []
+                furniture: [FurnitureItem] = [],
+                parts: [ModelPart] = []
             ) {
                 self.error = error
                 self.floors = floors
@@ -325,6 +341,7 @@ public struct Workspace {
                 self.walls = walls
                 self.utilities = utilities
                 self.furniture = furniture
+                self.parts = parts
                 self.name = name
                 self.projectID = id
                 self.scans = scans
@@ -340,6 +357,9 @@ public struct Workspace {
             case undoLastGeometryCorrectionButtonTapped
             case undoLastScanPlacementButtonTapped
             case undoLastFloorVariantButtonTapped
+            case extractPart(UUID, String, [String])
+            case detachPart(UUID)
+            case undoLastPartButtonTapped
         }
 
         public init() {}
@@ -362,6 +382,23 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
+                case .extractPart(let scanID, let name, let paths):
+                    do {
+                        guard let scan = state.scans.first(where: { $0.id == scanID }) else {
+                            throw HouseScene.PreviewError.missingSource
+                        }
+                        try HouseScene.validateSelection(scan, paths: paths)
+                        let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        state.parts.append(ModelPart(id: UUID(), name: label.isEmpty ? "Część modelu" : label,
+                                                     scanID: scanID, nodePaths: Array(Set(paths)).sorted()))
+                        state.error = nil
+                    } catch {
+                        state.error = error.localizedDescription
+                    }
+                case .detachPart(let id):
+                    state.detachPart(id)
+                case .undoLastPartButtonTapped:
+                    if let id = state.parts.last?.id { state.detachPart(id) }
                 case .scans:
                     break
                 case .undoLastScanPlacementButtonTapped:
@@ -679,7 +716,13 @@ public struct Workspace {
                 state.error = nil
             case .importUsdz(let payload):
                 do {
-                    let captured = try roomFromUsdz(payload)
+                    let captured: CapturedScan
+                    do {
+                        captured = try roomFromUsdz(payload)
+                    } catch let error as ScanError where error == .notRoomPlan || error == .missingFloor || error == .notZip {
+                        guard HouseScene.mesh(bytes: payload, transform: .identity) != nil else { throw error }
+                        captured = CapturedScan(rooms: [])
+                    }
                     if state.selectedProjectIndex == nil {
                         let project = Project.State(
                             id: uuid(),
@@ -834,6 +877,13 @@ public struct Workspace {
         } catch {
             state.storageError = "Nie udało się zapisać projektów: \(error.localizedDescription)"
         }
+    }
+}
+
+extension Workspace.Project.State {
+    mutating func detachPart(_ id: UUID) {
+        parts.removeAll { $0.id == id }
+        error = nil
     }
 }
 

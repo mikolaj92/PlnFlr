@@ -38,6 +38,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var walls: [WallSegment]
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
+        var parts: [ModelPart]
 
         init(_ state: Workspace.Project.State) {
             id = state.id
@@ -56,10 +57,11 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = state.walls
             utilities = state.utilities
             furniture = state.furniture
+            parts = state.parts
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture
+            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
         }
 
         public init(from decoder: Decoder) throws {
@@ -80,6 +82,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = try container.decodeIfPresent([WallSegment].self, forKey: .walls) ?? []
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
+            parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
         }
 
         var state: Workspace.Project.State {
@@ -89,7 +92,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture)
+                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
         }
     }
 

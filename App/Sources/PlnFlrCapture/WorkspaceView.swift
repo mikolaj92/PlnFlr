@@ -111,6 +111,7 @@ public struct WorkspaceView: View {
                     if !project.scans.isEmpty {
                         ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
+                        ModelPartsView(store: projectStore)
                     }
                     if project.floors.isEmpty {
                         if !project.scans.isEmpty {
@@ -184,6 +185,7 @@ private struct ProjectHeaderView: View {
 
 private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
+    var selection: [String]? = nil
     @State private var scene: SCNScene?
     @State private var errors: [String] = []
 
@@ -205,10 +207,108 @@ private struct ScanSceneView: View {
             Text("Ustawienie zmienia tylko podgląd źródła. Podłogi i obliczenia pozostają bez zmian.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .onChange(of: scans, initial: true) { _, value in
-            let preview = HouseScene.scans(value)
-            scene = preview.scene
-            errors = preview.errors
+        .onChange(of: scans, initial: true) { _, _ in refreshScene() }
+        .onChange(of: selection) { _, _ in refreshScene() }
+    }
+
+    private func refreshScene() {
+        let preview = HouseScene.scans(scans, selection: selection)
+        scene = preview.scene
+        errors = preview.errors
+    }
+}
+
+private struct ModelPartsView: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+    @State private var scanID: UUID?
+    @State private var paths: Set<String> = []
+    @State private var name = "Część modelu"
+    @State private var elements: [HouseScene.Element] = []
+    @State private var rooms: [HouseScene.RoomSelection] = []
+    @State private var error: String?
+    @State private var preview: ModelPart?
+
+    var body: some View {
+        DisclosureGroup("Części modelu 3D") {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Źródło", selection: $scanID) {
+                    Text("Wybierz źródło").tag(nil as UUID?)
+                    ForEach(store.scans) { scan in
+                        Text(scan.label).tag(Optional(scan.id))
+                    }
+                }
+                TextField("Nazwa części", text: $name)
+                ForEach(rooms) { room in
+                    Button("Wybierz pokój RoomPlan: \(room.id)") { paths = Set(room.paths) }
+                }
+                Text("Zaznaczenie elementów nie tworzy pokoju ani podłogi.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(alignment: .leading) {
+                        ForEach(elements) { element in
+                            Toggle(element.name, isOn: Binding(
+                                get: { paths.contains(element.id) },
+                                set: { selected in
+                                    if selected { paths.insert(element.id) } else { paths.remove(element.id) }
+                                }
+                            ))
+                        }
+                    }
+                }
+                .frame(maxHeight: 240)
+                HStack {
+                    Button("Podgląd zaznaczenia") {
+                        if let scanID {
+                            preview = ModelPart(id: UUID(), name: name, scanID: scanID, nodePaths: paths.sorted())
+                        }
+                    }
+                    Button("Wydziel część") {
+                        if let scanID { store.send(.extractPart(scanID, name, paths.sorted())) }
+                    }
+                }
+                .disabled(scanID == nil)
+                if let message = error ?? store.error {
+                    Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+                ForEach(store.parts) { part in
+                    HStack {
+                        Text(part.name)
+                        Button("Podgląd") { preview = part }
+                        Button("Odłącz") { store.send(.detachPart(part.id)) }
+                    }
+                }
+                if !store.parts.isEmpty {
+                    Button("Cofnij ostatnie wydzielenie") { store.send(.undoLastPartButtonTapped) }
+                }
+            }
+        }
+        .onChange(of: scanID) { _, _ in loadSource() }
+        .onChange(of: store.scans) { _, _ in loadSource() }
+        .sheet(item: $preview) { part in
+            VStack {
+                Text(part.name).font(.headline)
+                if let scan = store.scans.first(where: { $0.id == part.scanID }) {
+                    ScanSceneView(scans: [scan], selection: part.nodePaths)
+                } else {
+                    Label("Brak zachowanego źródła 3D.", systemImage: "exclamationmark.triangle")
+                }
+                Button("Zamknij") { preview = nil }
+            }
+            .padding()
+        }
+    }
+
+    private func loadSource() {
+        paths = []
+        elements = []
+        rooms = []
+        error = nil
+        guard let scan = store.scans.first(where: { $0.id == scanID }) else { return }
+        do {
+            elements = try HouseScene.elements(scan)
+            rooms = try HouseScene.rooms(scan)
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }
