@@ -20,7 +20,7 @@ public struct RoomPlanStructureSource: Codable, Equatable, Sendable {
         guard scan.roomPlanStructure != nil || scan.roomPlanJSON != nil else {
             return "Zmiana koloru niedostępna: brak zachowanych danych ścian RoomPlan. Sam USDZ nie potwierdza, które powierzchnie są ścianami."
         }
-        return "Zmiana koloru niedostępna: powiązanie ścian RoomPlan z powierzchniami modelu nie zostało zweryfikowane na rzeczywistym eksporcie. Nie tworzymy ścian z obrysu podłogi."
+        return "Zmiana koloru niedostępna: model nie zawiera powierzchni powiązanych z identyfikatorami ścian RoomPlan. Nie tworzymy ścian z obrysu podłogi."
     }
 
     public static func listedSourceTitle(label: String, roomCount: Int?, hasSourceUsdz: Bool) -> String? {
@@ -41,6 +41,18 @@ public struct RoomPlanStructureSource: Codable, Equatable, Sendable {
 
 #if os(iOS)
 enum RoomPlanStructurePreview {
+    static func wallIdentifiers(_ scan: Workspace.Scan.State) throws -> Set<UUID> {
+        if let source = scan.roomPlanStructure {
+            let structure = try JSONDecoder().decode(RoomPlan.CapturedStructure.self, from: source.structure)
+            return Set(structure.walls.map(\.identifier))
+        }
+        if let bytes = scan.roomPlanJSON {
+            let room = try JSONDecoder().decode(RoomPlan.CapturedRoom.self, from: bytes)
+            return Set(room.walls.map(\.identifier))
+        }
+        return []
+    }
+
     static func exportURL(_ source: RoomPlanStructureSource) throws -> URL {
         let structure = try JSONDecoder().decode(RoomPlan.CapturedStructure.self, from: source.structure)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).usdz")

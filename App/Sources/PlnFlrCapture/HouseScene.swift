@@ -5,6 +5,7 @@ import SceneKit.ModelIO
 import simd
 #if os(iOS)
 import RoomPlan
+import UIKit
 #endif
 
 public struct ScenePoint: Codable, Equatable, Sendable {
@@ -200,6 +201,51 @@ public enum HouseScene {
             return nil
         }
     }
+
+    #if os(iOS)
+    struct WallAppearance {
+        let geometry: SCNGeometry
+        let materials: [SCNMaterial]
+
+        func apply(color: UIColor?) {
+            guard let color else {
+                geometry.materials = materials
+                return
+            }
+            geometry.materials = materials.map { original in
+                let material = original.copy() as! SCNMaterial
+                material.diffuse.contents = color
+                return material
+            }
+        }
+    }
+
+    static func wallAppearances(_ scan: Workspace.Scan.State, in scene: SCNScene) throws -> [WallAppearance] {
+        let identifiers = try RoomPlanStructurePreview.wallIdentifiers(scan)
+        guard !identifiers.isEmpty,
+              let root = scene.rootNode.childNode(withName: "scan.\(scan.id.uuidString)", recursively: false) else { return [] }
+        let pattern = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        var result: [WallAppearance] = []
+        root.enumerateChildNodes { node, _ in
+            guard let original = node.geometry else { return }
+            var ancestor: SCNNode? = node
+            while let candidate = ancestor, candidate !== root {
+                if let name = candidate.name,
+                   let range = name.range(of: pattern, options: .regularExpression),
+                   let identifier = UUID(uuidString: String(name[range])) {
+                    if identifiers.contains(identifier) {
+                        let geometry = original.copy() as! SCNGeometry
+                        node.geometry = geometry
+                        result.append(WallAppearance(geometry: geometry, materials: original.materials))
+                    }
+                    break
+                }
+                ancestor = candidate.parent
+            }
+        }
+        return result
+    }
+    #endif
 
     struct Element: Identifiable {
         var id: String

@@ -200,8 +200,13 @@ private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
     var selection: [String]? = nil
     var title = "Wspólna mapa skanów 3D"
+    var allowsWallAppearance = false
     @State private var scene: SCNScene?
     @State private var errors: [String] = []
+    #if os(iOS)
+    @State private var wallAppearances: [HouseScene.WallAppearance] = []
+    @State private var wallColor = "existing"
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -213,6 +218,31 @@ private struct ScanSceneView: View {
                     .accessibilityLabel("Wspólna mapa skanów. Źródła: \(scans.count)")
                     .accessibilityIdentifier("scanScenePreview")
             }
+            #if os(iOS)
+            if allowsWallAppearance {
+                Text(RoomPlanStructureSource.appearanceDisclosure)
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker("Wygląd ścian", selection: $wallColor) {
+                    Text("Stan istniejący").tag("existing")
+                    Text("Biały").tag("white")
+                    Text("Beżowy").tag("beige")
+                    Text("Zielony").tag("green")
+                }
+                .disabled(wallAppearances.isEmpty)
+                .onChange(of: wallColor) { _, color in
+                    let colors: [String: UIColor] = [
+                        "white": .white,
+                        "beige": UIColor(red: 0.85, green: 0.78, blue: 0.65, alpha: 1),
+                        "green": UIColor(red: 0.55, green: 0.65, blue: 0.50, alpha: 1)
+                    ]
+                    for wall in wallAppearances { wall.apply(color: colors[color]) }
+                }
+                if wallAppearances.isEmpty, let scan = scans.first {
+                    Text(RoomPlanStructureSource.wallAppearanceLimitation(scan))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            #endif
             ForEach(Array(errors.enumerated()), id: \.offset) { _, message in
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
@@ -229,6 +259,19 @@ private struct ScanSceneView: View {
         let preview = HouseScene.scans(scans, selection: selection)
         scene = preview.scene
         errors = preview.errors
+        #if os(iOS)
+        wallColor = "existing"
+        wallAppearances = []
+        if allowsWallAppearance {
+            do {
+                for scan in scans {
+                    wallAppearances += try HouseScene.wallAppearances(scan, in: preview.scene)
+                }
+            } catch {
+                errors.append(error.localizedDescription)
+            }
+        }
+        #endif
     }
 }
 
@@ -367,18 +410,7 @@ private struct RoomPlanSourceListView: View {
             Label(title(scan), systemImage: "view.3d")
                 .font(.headline)
             #if os(iOS)
-            ScanSceneView(scans: [scan], title: "Źródłowy model 3D")
-            Text(RoomPlanStructureSource.appearanceDisclosure)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker("Wygląd ścian", selection: .constant("existing")) {
-                Text("Stan istniejący").tag("existing")
-            }
-            .disabled(true)
-            .accessibilityHint(RoomPlanStructureSource.wallAppearanceLimitation(scan))
-            Text(RoomPlanStructureSource.wallAppearanceLimitation(scan))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            ScanSceneView(scans: [scan], title: "Źródłowy model 3D", allowsWallAppearance: true)
             #else
             Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
                 .font(.caption)
