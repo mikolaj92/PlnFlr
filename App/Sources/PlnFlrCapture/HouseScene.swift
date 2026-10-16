@@ -99,13 +99,45 @@ public struct FurnitureItem: Codable, Equatable, Sendable, Identifiable {
     public var origin: ScenePoint
     public var state: RecordState
     public var hidden: Bool
-    public init(id: UUID, name: String, size: ScenePoint, origin: ScenePoint, state: RecordState, hidden: Bool = false) {
+    public var roomID: UUID?
+    public var yawDegrees: Int
+    public var source: UtilitySource?
+
+    public init(id: UUID, name: String, size: ScenePoint, origin: ScenePoint, state: RecordState, hidden: Bool = false, roomID: UUID? = nil, yawDegrees: Int = 0, source: UtilitySource? = nil) {
         self.id = id
         self.name = name
         self.size = size
         self.origin = origin
         self.state = state
         self.hidden = hidden
+        self.roomID = roomID
+        self.yawDegrees = yawDegrees
+        self.source = source
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, size, origin, state, hidden, roomID, yawDegrees, source
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        size = try values.decode(ScenePoint.self, forKey: .size)
+        origin = try values.decode(ScenePoint.self, forKey: .origin)
+        state = try values.decode(RecordState.self, forKey: .state)
+        hidden = try values.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        roomID = try values.decodeIfPresent(UUID.self, forKey: .roomID)
+        yawDegrees = try values.decodeIfPresent(Int.self, forKey: .yawDegrees) ?? 0
+        source = try values.decodeIfPresent(UtilitySource.self, forKey: .source)
+        try validate()
+    }
+
+    public func validate() throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              size.xMm > 0, size.yMm > 0, size.zMm > 0 else {
+            throw FurnitureInputError.invalid
+        }
     }
 }
 
@@ -422,12 +454,51 @@ public enum HouseScene {
         return (scene, errors)
     }
 
-    public static func scene(walls: [WallSegment], routes: [UtilityRoute], furniture: [FurnitureItem]) -> SCNScene {
-        let scene = SCNScene()
+    public static func scene(walls: [WallSegment], routes: [UtilityRoute], furniture: [FurnitureItem], floors: [Workspace.Floor.State] = [], scanScene: SCNScene? = nil) -> SCNScene {
+        let scene = scanScene ?? SCNScene()
+        for node in scene.rootNode.childNodes where node.camera != nil { node.removeFromParentNode() }
+        for floor in floors {
+            #if os(iOS)
+            let path = UIBezierPath()
+            #else
+            let path = NSBezierPath()
+            #endif
+            for polygon in [floor.room.outer] + floor.room.holes {
+                guard let first = polygon.vertices.first else { continue }
+                path.move(to: CGPoint(x: Double(first.xMm) / 1000, y: -Double(first.yMm) / 1000))
+                for vertex in polygon.vertices.dropFirst() {
+                    #if os(iOS)
+                    path.addLine(to: CGPoint(x: Double(vertex.xMm) / 1000, y: -Double(vertex.yMm) / 1000))
+                    #else
+                    path.line(to: CGPoint(x: Double(vertex.xMm) / 1000, y: -Double(vertex.yMm) / 1000))
+                    #endif
+                }
+                path.close()
+            }
+            #if os(iOS)
+            path.usesEvenOddFillRule = true
+            #else
+            path.windingRule = .evenOdd
+            #endif
+            let shape = SCNShape(path: path, extrusionDepth: 0.001)
+            #if os(iOS)
+            shape.firstMaterial?.diffuse.contents = UIColor.systemGray
+            #else
+            shape.firstMaterial?.diffuse.contents = NSColor.systemGray
+            #endif
+            let node = SCNNode(geometry: shape)
+            node.name = "floor.\(floor.id.uuidString)"
+            node.eulerAngles.x = -.pi / 2
+            scene.rootNode.addChildNode(node)
+        }
         for wall in walls {
             let node = SCNNode(geometry: SCNBox(width: span(wall) / 1000, height: Double(wall.heightMm) / 1000, length: 0.1, chamferRadius: 0))
             node.name = "wall.\(wall.id.uuidString)"
             node.geometry?.firstMaterial?.diffuse.contents = wall.finish
+            node.position = SCNVector3((Double(wall.start.xMm) + Double(wall.end.xMm)) / 2000,
+                                       (Double(wall.start.zMm) + Double(wall.end.zMm) + Double(wall.heightMm)) / 2000,
+                                       (Double(wall.start.yMm) + Double(wall.end.yMm)) / 2000)
+            node.eulerAngles = SCNVector3(0, -atan2(Double(wall.end.yMm) - Double(wall.start.yMm), Double(wall.end.xMm) - Double(wall.start.xMm)), 0)
             scene.rootNode.addChildNode(node)
         }
         for route in routes {
@@ -457,6 +528,12 @@ public enum HouseScene {
             let node = SCNNode(geometry: SCNBox(width: Double(item.size.xMm) / 1000, height: Double(item.size.zMm) / 1000, length: Double(item.size.yMm) / 1000, chamferRadius: 0))
             node.name = "furniture.\(item.id.uuidString)"
             node.position = SCNVector3(Double(item.origin.xMm) / 1000, Double(item.origin.zMm) / 1000, Double(item.origin.yMm) / 1000)
+            node.eulerAngles = SCNVector3(0, Double(item.yawDegrees % 360) * .pi / 180, 0)
+            #if os(iOS)
+            node.geometry?.firstMaterial?.diffuse.contents = item.state == .planned ? UIColor.systemOrange : UIColor.systemBlue
+            #else
+            node.geometry?.firstMaterial?.diffuse.contents = item.state == .planned ? NSColor.systemOrange : NSColor.systemBlue
+            #endif
             scene.rootNode.addChildNode(node)
         }
         if !scene.rootNode.childNodes.isEmpty {
@@ -480,8 +557,8 @@ public enum HouseScene {
     }
 
     private static func span(_ wall: WallSegment) -> Double {
-        let dx = Double(wall.end.xMm - wall.start.xMm)
-        let dy = Double(wall.end.yMm - wall.start.yMm)
+        let dx = Double(wall.end.xMm) - Double(wall.start.xMm)
+        let dy = Double(wall.end.yMm) - Double(wall.start.yMm)
         return max(simd_length(simd_double2(dx, dy)), 1)
     }
 }

@@ -167,7 +167,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var state: Workspace.Floor.State {
             var state = Workspace.Floor.State(id: id, name: name, room: room, thresholds: thresholds, windows: windows,
                   expansionMm: expansionMm, plankLengthM: plankLengthM, plankWidthM: plankWidthM, accessID: accessID)
-            state.storey = storey
+            state.storey = storey?.isEmpty == false ? storey : "Kondygnacja 1"
             state.material = material
             state.packSize = packSize
             state.groutMm = groutMm
@@ -191,9 +191,24 @@ public struct WorkspaceStorage: Sendable {
             return WorkspaceArchive(Workspace.State())
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
+        try validate(archive)
+        return archive
+    }
+
+    private func validate(_ archive: WorkspaceArchive) throws {
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
+        guard Set(archive.projects.map(\.id)).count == archive.projects.count else {
+            throw MaterialInputError.invalid
+        }
         for project in archive.projects {
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
+            guard Set(project.furniture.map(\.id)).count == project.furniture.count,
+                  project.furniture.allSatisfy({ item in
+                      item.roomID == nil || project.floors.contains(where: { $0.id == item.roomID })
+                  }) else { throw FurnitureInputError.invalid }
+            for item in project.furniture {
+                try item.validate()
+            }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
             for variant in project.floorVariants where variant.before != nil {
@@ -215,10 +230,10 @@ public struct WorkspaceStorage: Sendable {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
         }
-        return archive
     }
 
     public func save(_ archive: WorkspaceArchive) throws {
+        try validate(archive)
         let data = try JSONEncoder().encode(archive)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
