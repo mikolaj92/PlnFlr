@@ -44,14 +44,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             id = state.id
             name = state.name
             scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) }
-            floors = state.floors.map { floor in
-                if let variant = state.activeFloorVariant,
-                   let input = variant.inputs?.first(where: { $0.id == floor.id }),
-                   floor.error != nil {
-                    return FloorRecord(input.state)
-                }
-                return FloorRecord(floor)
-            }
+            floors = state.floors.map(FloorRecord.init)
             selectedFloorIDs = state.selectedFloorIDs
             splitAtM = state.splitAtM
             splitAxis = state.splitAxis
@@ -216,7 +209,6 @@ public struct WorkspaceStorage: Sendable {
                 }
                 for snapshot in before + inputs {
                     try validateRoom(outer: snapshot.room.outer.vertices, holes: snapshot.room.holes.map(\.vertices))
-                    _ = try snapshot.state.makePlan()
                 }
             }
             for floor in project.floors {

@@ -24,6 +24,9 @@ extension Workspace.Floor.State {
         packSize = other.packSize
         groutMm = other.groutMm
         finish = other.finish
+        expansionMm = other.expansionMm
+        plankLengthM = other.plankLengthM
+        plankWidthM = other.plankWidthM
     }
 
     func makePlan() throws -> LayoutPlan {

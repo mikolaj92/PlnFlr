@@ -798,6 +798,8 @@ public struct Workspace {
                     )
                     first.copyMaterial(from: original)
                     second.copyMaterial(from: original)
+                    first.storey = original.storey
+                    second.storey = original.storey
                     let correction = GeometryCorrection(
                         id: uuid(),
                         operation: .split(axis: state.projects[index].splitAxis, atMm: atMm),
@@ -832,6 +834,7 @@ public struct Workspace {
                         accessID: selected[0].accessID == selected[1].accessID ? selected[0].accessID : nil
                     )
                     item.copyMaterial(from: selected[0])
+                    item.storey = selected[0].storey == selected[1].storey ? selected[0].storey : nil
                     let correction = GeometryCorrection(
                         id: uuid(),
                         operation: .join,
@@ -863,15 +866,7 @@ public struct Workspace {
             Project()
         }
         .onChange(of: store.projects.map { $0.floors.map(WorkspaceArchive.FloorRecord.init) }) { state in
-            for p in state.projects.indices {
-                if let variant = state.projects[p].activeFloorVariant,
-                   let index = state.projects[p].floorVariants.firstIndex(where: { $0.id == variant.id }) {
-                    let floors = state.projects[p].floors.filter { variant.floorIDs.contains($0.id) }
-                    if floors.count == variant.floorIDs.count && floors.allSatisfy({ $0.plan != nil }) {
-                        state.projects[p].floorVariants[index].inputs = floors.map(FloorSnapshot.init)
-                    }
-                }
-            }
+            state.refreshPlans()
         }
         .onChange(of: WorkspaceArchive(store.state)) { state in
             guard state.hasLoaded else { return }

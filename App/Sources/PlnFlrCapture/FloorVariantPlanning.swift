@@ -76,8 +76,7 @@ extension Workspace.State {
             }
             if let active, let index = projects[p].floorVariants.firstIndex(where: { $0.id == active.id }) {
                 let floors = projects[p].floors.filter { active.floorIDs.contains($0.id) }
-                if floors.count == active.floorIDs.count,
-                   floors.allSatisfy({ $0.plan != nil }) {
+                if floors.count == active.floorIDs.count {
                     projects[p].floorVariants[index].inputs = floors.map(FloorSnapshot.init)
                 }
             }
