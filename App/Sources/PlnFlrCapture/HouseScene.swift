@@ -130,8 +130,13 @@ public struct FurnitureItem: Codable, Equatable, Sendable, Identifiable {
         roomID = try values.decodeIfPresent(UUID.self, forKey: .roomID)
         yawDegrees = try values.decodeIfPresent(Int.self, forKey: .yawDegrees) ?? 0
         source = try values.decodeIfPresent(UtilitySource.self, forKey: .source)
-        guard size.xMm > 0, size.yMm > 0, size.zMm > 0 else {
-            throw DecodingError.dataCorruptedError(forKey: .size, in: values, debugDescription: "Wymiary mebla muszą być dodatnie.")
+        try validate()
+    }
+
+    public func validate() throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              size.xMm > 0, size.yMm > 0, size.zMm > 0 else {
+            throw FurnitureInputError.invalid
         }
     }
 }
