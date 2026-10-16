@@ -4,9 +4,6 @@ import PlnFlrLayout
 import SceneKit
 import SwiftUI
 import UniformTypeIdentifiers
-#if os(iOS)
-import QuickLook
-#endif
 
 public struct WorkspaceView: View {
     @Bindable public var store: StoreOf<Workspace>
@@ -202,12 +199,13 @@ private struct ProjectHeaderView: View {
 private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
     var selection: [String]? = nil
+    var title = "Wspólna mapa skanów 3D"
     @State private var scene: SCNScene?
     @State private var errors: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Wspólna mapa skanów 3D").font(.headline)
+            Text(title).font(.headline)
             if let scene {
                 SceneView(scene: scene, pointOfView: scene.rootNode.childNode(withName: "scans.camera", recursively: false),
                           options: [.allowsCameraControl, .autoenablesDefaultLighting], preferredFramesPerSecond: 30)
@@ -331,8 +329,6 @@ private struct ModelPartsView: View {
 
 private struct RoomPlanSourceListView: View {
     let scans: [Workspace.Scan.State]
-    @State private var previewURL: URL?
-    @State private var previewError: String?
     @State private var selectedScan: Workspace.Scan.State?
 
     private var listed: [Workspace.Scan.State] { scans }
@@ -345,7 +341,6 @@ private struct RoomPlanSourceListView: View {
                     sourceCard(scan)
                 }
             }
-            .quickLookPreview($previewURL)
             .accessibilityIdentifier("roomPlan3DSourceList")
             #else
             VStack(alignment: .leading, spacing: 16) {
@@ -364,12 +359,6 @@ private struct RoomPlanSourceListView: View {
             }
             #endif
         }
-        .onChange(of: previewURL) { oldURL, _ in
-            if let oldURL { try? FileManager.default.removeItem(at: oldURL) }
-        }
-        .onDisappear {
-            if let previewURL { try? FileManager.default.removeItem(at: previewURL) }
-        }
     }
 
     @ViewBuilder
@@ -377,19 +366,23 @@ private struct RoomPlanSourceListView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title(scan), systemImage: "view.3d")
                 .font(.headline)
+            #if os(iOS)
+            ScanSceneView(scans: [scan], title: "Źródłowy model 3D")
+            Text(RoomPlanStructureSource.appearanceDisclosure)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker("Wygląd ścian", selection: .constant("existing")) {
+                Text("Stan istniejący").tag("existing")
+            }
+            .disabled(true)
+            .accessibilityHint(RoomPlanStructureSource.wallAppearanceLimitation(scan))
+            Text(RoomPlanStructureSource.wallAppearanceLimitation(scan))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            #else
             Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            #if os(iOS)
-            Button("Otwórz podgląd 3D") {
-                do {
-                    previewError = nil
-                    previewURL = try HouseScene.previewURL(scan)
-                } catch {
-                    previewError = "\(scan.label): \(error.localizedDescription)"
-                }
-            }
-            #else
             if scan.sourceUsdz != nil {
                 Button("Otwórz podgląd 3D") { selectedScan = scan }
             } else {
@@ -398,11 +391,6 @@ private struct RoomPlanSourceListView: View {
                     .foregroundStyle(.secondary)
             }
             #endif
-            if let previewError {
-                Label(previewError, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

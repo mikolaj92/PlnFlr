@@ -12,7 +12,16 @@ public struct RoomPlanStructureSource: Codable, Equatable, Sendable {
     /// RoomPlan source geometry is preserved, but accuracy has not been verified against reference measurements.
     public static let unverifiedAccuracyDisclosure = "Źródło RoomPlan zachowano. Dokładność geometrii nie została zweryfikowana względem pomiarów referencyjnych; sprawdź wymiary przed użyciem do planowania."
 
+    public static let appearanceDisclosure = "Podgląd wyglądu — nie katalog produktu ani pomiar"
+
     public var accuracyDisclosure: String { Self.unverifiedAccuracyDisclosure }
+
+    static func wallAppearanceLimitation(_ scan: Workspace.Scan.State) -> String {
+        guard scan.roomPlanStructure != nil || scan.roomPlanJSON != nil else {
+            return "Zmiana koloru niedostępna: brak zachowanych danych ścian RoomPlan. Sam USDZ nie potwierdza, które powierzchnie są ścianami."
+        }
+        return "Zmiana koloru niedostępna: powiązanie ścian RoomPlan z powierzchniami modelu nie zostało zweryfikowane na rzeczywistym eksporcie. Nie tworzymy ścian z obrysu podłogi."
+    }
 
     public static func listedSourceTitle(label: String, roomCount: Int?, hasSourceUsdz: Bool) -> String? {
         if let roomCount {
