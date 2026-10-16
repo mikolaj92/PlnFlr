@@ -97,23 +97,28 @@ import Testing
         selectedProjectID: projectID
     )
     state.hasLoaded = true
+    state.hasPro = true
     let store = await TestStoreActor(initialState: state) {
         Workspace().environment(\.workspaceFiles, WorkspaceFiles(load: { try storage.load() }, save: { try storage.save($0) }))
     }
     let firstPlan = try first.makePlan()
     let secondPlan = try second.makePlan()
 
-    await store.send(.planSelectedFloorsButtonTapped(projectID)) {
+    await store.send(.createFloorVariantButtonTapped(projectID)) {
         $0.projects[0].floors[0].plan = firstPlan
         $0.projects[0].floors[1].plan = secondPlan
-        $0.projects[0].floorVariants = [FloorVariant(
+        var variant = FloorVariant(
             id: variantID, floorIDs: [firstID, secondID],
             areaNetMm2: firstPlan.bom.areaNetMm2 + secondPlan.bom.areaNetMm2,
             areaBoughtMm2: firstPlan.bom.areaBoughtMm2 + secondPlan.bom.areaBoughtMm2,
             fullBoards: firstPlan.bom.fullBoards + secondPlan.bom.fullBoards,
             pieces: firstPlan.bom.pieces + secondPlan.bom.pieces,
-            packs: (firstPlan.bom.packs ?? 0) + (secondPlan.bom.packs ?? 0)
-        )]
+            packs: nil
+        )
+        variant.before = [FloorSnapshot(first), FloorSnapshot(second)]
+        variant.inputs = variant.before
+        variant.selectedFloorIDsBefore = [firstID, secondID]
+        $0.projects[0].floorVariants = [variant]
     }
 
     let restored = try storage.load()
@@ -122,6 +127,8 @@ import Testing
     #expect(restored.state.projects[0].scans[0].sourceUsdz == source)
 
     await store.send(.projects(projectID, .undoLastFloorVariantButtonTapped)) {
+        $0.projects[0].floors[0].plan = nil
+        $0.projects[0].floors[1].plan = nil
         $0.projects[0].undoneFloorVariantIDs = [variantID]
     }
     let afterUndo = try storage.load().state.projects[0]
