@@ -113,6 +113,7 @@ public struct DrillQuery: Equatable, Sendable {
     public var origin: ScenePoint
     public var direction: ScenePoint
     public var depthMm: Int
+    public var diameterMm: Int = 6
 }
 
 public struct DrillHit: Equatable, Sendable {
@@ -120,36 +121,73 @@ public struct DrillHit: Equatable, Sendable {
     public var name: String
     public var source: UtilitySource
     public var confidence: UtilityConfidence
+    public var state: RecordState
 }
 
 public enum DrillAnswer: Equatable, Sendable {
     case unknown
+    case invalidQuery
+    case incomplete([DrillHit])
     case hits([DrillHit])
 }
 
 public enum HouseScene {
+    public static let drillToleranceMm = 0.1
+
     public static func drill(_ query: DrillQuery, routes: [UtilityRoute]) -> DrillAnswer {
-        guard !routes.isEmpty else { return .unknown }
-        let depth = max(query.depthMm, 0)
-        let direction = simd_double3(Double(query.direction.xMm), Double(query.direction.yMm), Double(query.direction.zMm))
+        let direction = vector(query.direction)
         let length = simd_length(direction)
-        guard length > 0 else { return .unknown }
+        guard query.depthMm > 0, query.diameterMm > 0, length > 0 else { return .invalidQuery }
+        guard !routes.isEmpty else { return .unknown }
         let unit = direction / length
-        let origin = simd_double3(Double(query.origin.xMm), Double(query.origin.yMm), Double(query.origin.zMm))
+        let origin = vector(query.origin)
+        let depth = Double(query.depthMm)
+        let radius = Double(query.diameterMm) / 2
+        func distanceSquared(_ point: SIMD3<Double>) -> Double {
+            let along = simd_dot(point, unit)
+            let radial = max(simd_length(point - unit * along) - radius, 0)
+            let axial = max(-along, along - depth, 0)
+            return radial * radial + axial * axial
+        }
         var hits: [DrillHit] = []
+        var incomplete = false
         for route in routes {
-            let radius = Double(route.diameterMm) / 2
-            let struck = route.points.contains { point in
-                let candidate = simd_double3(Double(point.xMm), Double(point.yMm), Double(point.zMm)) - origin
-                let along = simd_dot(candidate, unit)
-                guard along >= 0, along <= Double(depth) else { return false }
-                return simd_length(candidate - unit * along) <= radius
+            guard route.diameterMm > 0, route.points.count >= 2 else {
+                incomplete = true
+                continue
+            }
+            var struck = false
+            let clearance = Double(route.diameterMm) / 2 + drillToleranceMm
+            for (start, end) in zip(route.points, route.points.dropFirst()) {
+                guard start != end else {
+                    incomplete = true
+                    continue
+                }
+                let a = vector(start) - origin
+                let delta = vector(end) - vector(start)
+                var lower = 0.0
+                var upper = 1.0
+                for _ in 0..<128 {
+                    let left = lower + (upper - lower) / 3
+                    let right = upper - (upper - lower) / 3
+                    if distanceSquared(a + delta * left) <= distanceSquared(a + delta * right) {
+                        upper = right
+                    } else {
+                        lower = left
+                    }
+                }
+                let distance = min(distanceSquared(a), distanceSquared(a + delta), distanceSquared(a + delta * ((lower + upper) / 2)))
+                if distance <= clearance * clearance { struck = true }
             }
             if struck {
-                hits.append(DrillHit(routeID: route.id, name: route.name, source: route.source, confidence: route.confidence))
+                hits.append(DrillHit(routeID: route.id, name: route.name, source: route.source, confidence: route.confidence, state: route.state))
             }
         }
-        return .hits(hits)
+        return incomplete ? .incomplete(hits) : .hits(hits)
+    }
+
+    private static func vector(_ point: ScenePoint) -> SIMD3<Double> {
+        SIMD3(Double(point.xMm), Double(point.yMm), Double(point.zMm))
     }
 
     enum PreviewError: LocalizedError {
