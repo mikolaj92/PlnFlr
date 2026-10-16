@@ -122,12 +122,16 @@ public enum HouseScene {
         case unreadable
         case roomPlanUnavailable
         case missingSource
+        case emptySelection
+        case missingNode(String)
 
         var errorDescription: String? {
             switch self {
             case .unreadable: "Nie udało się odczytać geometrii źródła."
             case .roomPlanUnavailable: "Podgląd RoomPlan wymaga iPhone’a lub iPada z API Apple."
             case .missingSource: "Brak zachowanego źródła 3D."
+            case .emptySelection: "Wybierz co najmniej jeden element modelu."
+            case .missingNode(let path): "Element źródła jest niedostępny: \(path)."
             }
         }
     }
@@ -182,7 +186,7 @@ public enum HouseScene {
         }
         guard hasGeometry else { throw PreviewError.unreadable }
         node.position = SCNVector3(CGFloat(transform.xMm) / 1000, CGFloat(transform.zMm) / 1000, CGFloat(transform.yMm) / 1000)
-        node.eulerAngles.y = CGFloat(transform.yawDegrees % 360) * .pi / 180
+        node.eulerAngles = SCNVector3(0, Double(transform.yawDegrees % 360) * .pi / 180, 0)
         return node
     }
 
@@ -197,14 +201,84 @@ public enum HouseScene {
         }
     }
 
-    static func scans(_ scans: [Workspace.Scan.State]) -> (scene: SCNScene, errors: [String]) {
+    struct Element: Identifiable {
+        var id: String
+        var name: String
+    }
+
+    struct RoomSelection: Identifiable {
+        var id: String
+        var paths: [String]
+    }
+
+    private static func sourceNode(_ scan: Workspace.Scan.State) throws -> SCNNode {
+        let url = try previewURL(scan)
+        defer { try? FileManager.default.removeItem(at: url) }
+        return try mesh(url: url, transform: scan.transform)
+    }
+
+    private static func indexedNodes(_ root: SCNNode) -> [(String, SCNNode)] {
+        var result: [(String, SCNNode)] = []
+        func visit(_ node: SCNNode, path: String) {
+            for (index, child) in node.childNodes.enumerated() {
+                let childPath = "\(path)/\(index)"
+                result.append((childPath, child))
+                visit(child, path: childPath)
+            }
+        }
+        visit(root, path: "")
+        return result
+    }
+
+    static func elements(_ scan: Workspace.Scan.State) throws -> [Element] {
+        try indexedNodes(sourceNode(scan)).map { path, node in
+            Element(id: path, name: "\(path) · \(node.name ?? "Element")")
+        }
+    }
+
+    static func rooms(_ scan: Workspace.Scan.State) throws -> [RoomSelection] {
+        let nodes = try indexedNodes(sourceNode(scan))
+        let sources = scan.roomPlanStructure?.rooms ?? scan.roomPlanJSON.map { [$0] } ?? []
+        return try sources.compactMap { data in
+            guard let room = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let id = room["identifier"] as? String else { return nil }
+            var identifiers = [id]
+            for key in ["walls", "doors", "windows", "openings", "objects", "floors"] {
+                let surfaces = room[key] as? [[String: Any]] ?? []
+                identifiers.append(contentsOf: surfaces.compactMap { $0["identifier"] as? String })
+            }
+            let paths = nodes.compactMap { path, node -> String? in
+                guard let name = node.name else { return nil }
+                return identifiers.contains(where: { name.localizedCaseInsensitiveContains($0) }) ? path : nil
+            }
+            return paths.isEmpty ? nil : RoomSelection(id: id, paths: paths)
+        }
+    }
+
+    private static func applySelection(_ paths: [String], to root: SCNNode) throws {
+        guard !paths.isEmpty else { throw PreviewError.emptySelection }
+        let nodes = indexedNodes(root)
+        let available = Set(nodes.map(\.0))
+        for path in paths where !available.contains(path) { throw PreviewError.missingNode(path) }
+        for (path, node) in nodes {
+            let included = paths.contains { path == $0 || path.hasPrefix($0 + "/") }
+            let ancestor = paths.contains { $0.hasPrefix(path + "/") }
+            node.isHidden = !included && !ancestor
+            if !included { node.geometry = nil }
+        }
+    }
+
+    static func validateSelection(_ scan: Workspace.Scan.State, paths: [String]) throws {
+        try applySelection(paths, to: sourceNode(scan))
+    }
+
+    static func scans(_ scans: [Workspace.Scan.State], selection: [String]? = nil) -> (scene: SCNScene, errors: [String]) {
         let scene = SCNScene()
         var errors: [String] = []
         for scan in scans {
             do {
-                let url = try previewURL(scan)
-                defer { try? FileManager.default.removeItem(at: url) }
-                let node = try mesh(url: url, transform: scan.transform)
+                let node = try sourceNode(scan)
+                if let selection { try applySelection(selection, to: node) }
                 node.name = "scan.\(scan.id.uuidString)"
                 scene.rootNode.addChildNode(node)
             } catch {
