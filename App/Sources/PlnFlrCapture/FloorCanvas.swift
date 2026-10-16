@@ -48,9 +48,9 @@ struct FloorCanvas: View {
     }
 }
 
-private let stonePreviewColors = ["#B8B9B3", "#999D99"]
+let stonePreviewColors = ["#B8B9B3", "#999D99"]
 
-private extension Color {
+extension Color {
     init(hex: String) {
         let value = UInt32(hex.dropFirst(), radix: 16) ?? 0xC69A62
         self.init(

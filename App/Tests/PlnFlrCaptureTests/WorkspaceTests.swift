@@ -184,21 +184,21 @@ import Testing
     let projectID = UUID(uuidString: "00000000-0000-0000-0000-000000000012")!
     let joinedID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let joinedRoom = try joinRooms(left, right)
-    var expectedJoined = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: joinedID)
+    var expectedJoined = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: joinedID, roomID: leftID)
     expectedJoined.copyMaterial(from: Workspace.Floor.State(id: leftID, name: "Salon A", room: left, accessID: leftID))
     let expectedCorrection = GeometryCorrection(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
         operation: .join,
         before: [
             FloorSnapshot(Workspace.Floor.State(id: leftID, name: "Salon A", room: left, accessID: leftID)),
-            FloorSnapshot(Workspace.Floor.State(id: rightID, name: "Salon B", room: right, accessID: rightID)),
+            FloorSnapshot(Workspace.Floor.State(id: rightID, name: "Salon B", room: right, accessID: rightID, roomID: leftID)),
         ],
         after: [FloorSnapshot(expectedJoined)]
     )
     var state = Workspace.State(
         projects: [.init(id: projectID, name: "Dom", floors: [
             .init(id: leftID, name: "Salon A", room: left, accessID: leftID),
-            .init(id: rightID, name: "Salon B", room: right, accessID: rightID),
+            .init(id: rightID, name: "Salon B", room: right, accessID: rightID, roomID: leftID),
         ], selectedFloorIDs: [leftID, rightID])],
         selectedProjectID: projectID
     )
@@ -208,7 +208,7 @@ import Testing
     }
 
     await store.send(.joinSelectedButtonTapped) {
-        var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: joinedID)
+        var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: joinedID, roomID: leftID)
         let originalFloor = Workspace.Floor.State(id: leftID, name: "Salon A", room: left, accessID: leftID)
         joinedFloor.copyMaterial(from: originalFloor)
         $0.projects[0].floors = [snap(joinedFloor)]
@@ -239,13 +239,13 @@ import Testing
     let joinedID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let project = Workspace.Project.State(id: projectID, name: "Projekt 1", floors: [
         Workspace.Floor.State(id: leftID, name: "Salon A", room: left),
-        Workspace.Floor.State(id: rightID, name: "Salon B", room: right),
+        Workspace.Floor.State(id: rightID, name: "Salon B", room: right, roomID: leftID),
     ], selectedFloorIDs: [leftID, rightID])
     let store = await TestStoreActor(initialState: Workspace.State(projects: [project], selectedProjectID: projectID)) {
         Workspace()
     }
     let joined = try joinRooms(left, right)
-    var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joined)
+    var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joined, roomID: leftID)
     joinedFloor.copyMaterial(from: project.floors[0])
     let correction = GeometryCorrection(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, operation: .join, before: project.floors.map(FloorSnapshot.init), after: [FloorSnapshot(joinedFloor)])
     await store.send(.joinSelectedButtonTapped) {

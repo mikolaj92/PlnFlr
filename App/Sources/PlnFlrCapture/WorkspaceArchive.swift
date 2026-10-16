@@ -39,6 +39,10 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
         var parts: [ModelPart]
+        var storeys: [Storey]
+        var rooms: [ProjectRoom]
+        var scope: ProjectScope
+        var activeStoreyID: UUID
 
         init(_ state: Workspace.Project.State) {
             id = state.id
@@ -58,10 +62,14 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             utilities = state.utilities
             furniture = state.furniture
             parts = state.parts
+            storeys = state.storeys
+            rooms = state.rooms
+            scope = state.scope
+            activeStoreyID = state.activeStoreyID
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts, storeys, rooms, scope, activeStoreyID
         }
 
         public init(from decoder: Decoder) throws {
@@ -83,6 +91,15 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
+            storeys = try container.decodeIfPresent([Storey].self, forKey: .storeys) ?? [Storey(id: id, name: "Kondygnacja domyślna")]
+            let defaultStoreyID = id
+            let roomFloors = floors.map(\.state) + geometryCorrections.flatMap { ($0.before + $0.after).map(\.state) }
+            rooms = try container.decodeIfPresent([ProjectRoom].self, forKey: .rooms) ?? Dictionary(grouping: roomFloors, by: \.roomID).map { key, values in
+                ProjectRoom(id: key, name: values[0].name, storeyID: defaultStoreyID)
+            }.sorted { $0.id.uuidString < $1.id.uuidString }
+            scope = try container.decodeIfPresent(ProjectScope.self, forKey: .scope) ?? .home
+            activeStoreyID = try container.decodeIfPresent(UUID.self, forKey: .activeStoreyID) ?? id
+            try state.validateReferences()
         }
 
         var state: Workspace.Project.State {
@@ -92,7 +109,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+                  walls: walls, utilities: utilities, furniture: furniture, parts: parts,
+                  storeys: storeys, rooms: rooms, scope: scope, activeStoreyID: activeStoreyID)
         }
     }
 
@@ -136,6 +154,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var packSize: String
         var groutMm: String
         var accessID: UUID
+        var roomID: UUID?
         var id: UUID
         var name: String
         var room: Room
@@ -151,6 +170,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             packSize = state.packSize
             groutMm = state.groutMm
             accessID = state.accessID
+            roomID = state.roomID
             id = state.id
             name = state.name
             room = state.room
@@ -165,6 +185,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var state: Workspace.Floor.State {
             var state = Workspace.Floor.State(id: id, name: name, room: room, thresholds: thresholds, windows: windows,
                   expansionMm: expansionMm, plankLengthM: plankLengthM, plankWidthM: plankWidthM, accessID: accessID)
+            state.roomID = roomID ?? accessID
             state.material = material
             state.packSize = packSize
             state.groutMm = groutMm
@@ -190,6 +211,7 @@ public struct WorkspaceStorage: Sendable {
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
         for project in archive.projects {
+            try project.state.validateReferences()
             for floor in project.floors {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
@@ -198,6 +220,7 @@ public struct WorkspaceStorage: Sendable {
     }
 
     public func save(_ archive: WorkspaceArchive) throws {
+        for project in archive.projects { try project.state.validateReferences() }
         let data = try JSONEncoder().encode(archive)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
