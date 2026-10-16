@@ -108,6 +108,12 @@ public struct WorkspaceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
+                    ProjectScopeView(store: projectStore)
+                    Button("Policz wybrany zakres") { store.send(.planSelectedFloorsButtonTapped(project.id)) }
+                        .disabled((try? project.resolvedFloors()) == nil)
+                    if let variant = project.floorVariants.last(where: { !project.undoneFloorVariantIDs.contains($0.id) }) {
+                        Text("\(FloorVariant.sumLabel): \(variant.pieces) elementów, netto \(variant.areaNetMm2) mm²")
+                    }
                     if !project.scans.isEmpty {
                         ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
@@ -119,7 +125,7 @@ public struct WorkspaceView: View {
                         }
                         WelcomeView(store: store)
                     } else {
-                        HouseCanvas(floors: project.floors, selectedID: project.selectedFloorIDs.first)
+                        HouseCanvas(floors: (try? project.resolvedFloors()) ?? [], selectedID: nil, storeys: project.storeys, rooms: project.rooms)
                             .frame(height: 220)
                             .padding()
                             .background(.quaternary, in: .rect(cornerRadius: 16))
@@ -489,11 +495,58 @@ private struct ScanRowView: View {
     }
 }
 
+private struct ProjectScopeView: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Zakres mapy i obliczeń", selection: Binding(get: { store.state.scope }, set: { $store[dynamicMember: \.scope].wrappedValue = $0 })) {
+                Text("Cały dom").tag(ProjectScope.home)
+                ForEach(store.storeys) { storey in
+                    Text(storey.name).tag(ProjectScope.storey(storey.id))
+                }
+                ForEach(store.rooms) { room in
+                    Text("Pokój: \(room.name)").tag(ProjectScope.room(room.id))
+                }
+            }
+            Picker("Kondygnacja nowych pokoi", selection: $store.activeStoreyID) {
+                ForEach(store.storeys) { storey in
+                    Text(storey.name).tag(storey.id)
+                }
+            }
+            Button("Dodaj kondygnację") {
+                let id = UUID()
+                $store.storeys.wrappedValue.append(Storey(id: id, name: "Kondygnacja \(store.storeys.count + 1)"))
+                $store.activeStoreyID.wrappedValue = id
+            }
+            DisclosureGroup("Kondygnacje i przypisania pokoi") {
+                ForEach($store.storeys) { $storey in
+                    TextField("Nazwa kondygnacji", text: $storey.name)
+                    HStack {
+                        TextField("X (mm)", value: $storey.xMm, format: .number)
+                        TextField("Y (mm)", value: $storey.yMm, format: .number)
+                        TextField("Z (mm)", value: $storey.zMm, format: .number)
+                    }
+                    Text("XYZ (mm): \(storey.xMm), \(storey.yMm), \(storey.zMm)")
+                }
+                ForEach($store.rooms) { $room in
+                    TextField("Nazwa pokoju", text: $room.name)
+                    Picker("Kondygnacja: \(room.name)", selection: $room.storeyID) {
+                        ForEach(store.storeys) { storey in
+                            Text(storey.name).tag(storey.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct RoomSelectionView: View {
     @Bindable var store: StoreOf<Workspace.Project>
     var body: some View {
         VStack(alignment: .leading) {
-            Text("Wybierz pokój").font(.headline)
+            Text("Wybierz powierzchnię do edycji").font(.headline)
             ScrollView(.horizontal) {
                 HStack {
                     ForEach(store.floors, id: \.floorID) { floor in
@@ -540,7 +593,7 @@ private struct SplitControlsView: View {
             HStack {
                 Button("Podziel", action: split).disabled(store.selectedFloorIDs.count != 1)
                 Button("Połącz", action: join).disabled(store.selectedFloorIDs.count != 2)
-                Button("Policz zaznaczone", action: planSelection).disabled(store.selectedFloorIDs.isEmpty)
+                Button("Policz zakres", action: planSelection).disabled((try? store.state.resolvedFloors()) == nil)
             }.buttonStyle(.bordered)
             if let variant = store.floorVariants.last(where: { !store.undoneFloorVariantIDs.contains($0.id) }) {
                 Text("\(FloorVariant.sumLabel): \(variant.pieces) elementów, netto \(variant.areaNetMm2) mm²")
@@ -643,10 +696,18 @@ public struct FloorView: View {
 struct HouseCanvas: View {
     var floors: [Workspace.Floor.State]
     var selectedID: UUID?
+    var storeys: [Storey] = []
+    var rooms: [ProjectRoom] = []
+
+    private func vertices(_ ring: [Vertex], floor: Workspace.Floor.State) -> [Vertex] {
+        let storeyID = rooms.first { $0.id == floor.roomID }?.storeyID
+        let storey = storeys.first { $0.id == storeyID }
+        return ring.map { Vertex($0.xMm + (storey?.xMm ?? 0), $0.yMm + (storey?.yMm ?? 0)) }
+    }
 
     var body: some View {
         Canvas { context, size in
-            let vertices = floors.flatMap { $0.room.outer.vertices }
+            let vertices = floors.flatMap { vertices($0.room.outer.vertices, floor: $0) }
             let minX = vertices.map(\.xMm).min() ?? 0
             let minY = vertices.map(\.yMm).min() ?? 0
             let width = max(CGFloat((vertices.map(\.xMm).max() ?? 1) - minX), 1)
@@ -660,8 +721,8 @@ struct HouseCanvas: View {
             }
             for floor in floors {
                 let selected = floor.floorID == selectedID
-                var shape = path(floor.room.outer.vertices, point)
-                for hole in floor.room.holes { shape.addPath(path(hole.vertices, point)) }
+                var shape = path(self.vertices(floor.room.outer.vertices, floor: floor), point)
+                for hole in floor.room.holes { shape.addPath(path(self.vertices(hole.vertices, floor: floor), point)) }
                 context.fill(shape, with: .color(selected ? .orange.opacity(0.35) : .secondary.opacity(0.15)), style: FillStyle(eoFill: true))
                 context.stroke(shape, with: .color(selected ? .orange : .primary.opacity(0.5)), lineWidth: selected ? 2 : 1)
             }

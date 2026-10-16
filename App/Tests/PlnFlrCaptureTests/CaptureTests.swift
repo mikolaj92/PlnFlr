@@ -90,13 +90,16 @@ import Testing
     let variantID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let source = Data("scan-bytes".utf8)
     let first = Workspace.Floor.State(id: firstID, name: "Salon", room: try rectangle(widthMm: 4000, heightMm: 3000))
-    let second = Workspace.Floor.State(id: secondID, name: "Kuchnia", room: try rectangle(widthMm: 2000, heightMm: 2000))
+    let second = Workspace.Floor.State(id: secondID, name: "Kuchnia", room: Room(try Ring([
+        Vertex(4000, 0), Vertex(6000, 0), Vertex(6000, 2000), Vertex(4000, 2000)
+    ])))
     let scan = Workspace.Scan.State(id: UUID(uuidString: "00000000-0000-0000-0000-000000000023")!, label: "Skan", rooms: [], sourceUsdz: source)
     var state = Workspace.State(
         projects: [.init(id: projectID, name: "Dom", scans: [scan], floors: [first, second], selectedFloorIDs: [firstID, secondID])],
         selectedProjectID: projectID
     )
     state.hasLoaded = true
+    state.hasPro = true
     let store = await TestStoreActor(initialState: state) {
         Workspace().environment(\.workspaceFiles, WorkspaceFiles(load: { try storage.load() }, save: { try storage.save($0) }))
     }

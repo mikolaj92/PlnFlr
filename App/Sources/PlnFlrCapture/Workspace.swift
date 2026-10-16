@@ -6,6 +6,7 @@ import PlnFlrLayout
 public struct FloorSnapshot: Codable, Equatable, Sendable {
     public let id: UUID
     public let name: String
+    public let roomID: UUID?
     public let room: Room
     public let thresholds: [Threshold]
     public let windows: [Opening]
@@ -21,6 +22,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
     public init(_ state: Workspace.Floor.State) {
         id = state.id
         name = state.name
+        roomID = state.roomID
         room = state.room
         thresholds = state.thresholds
         windows = state.windows
@@ -46,6 +48,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
             plankWidthM: plankWidthM,
             accessID: accessID
         )
+        state.roomID = roomID ?? accessID
         state.material = material
         state.packSize = packSize
         state.groutMm = groutMm
@@ -97,7 +100,6 @@ public struct ScanTransform: Codable, Equatable, Sendable {
     }
 }
 
-/// Sum of separate floor plans for one selection. Rooms are not unioned, so overlap is counted twice.
 public struct FloorVariant: Codable, Equatable, Sendable, Identifiable {
     public static let sumLabel = "Suma osobnych planów podłogi"
     public let id: UUID
@@ -169,6 +171,26 @@ public struct ModelPart: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+public struct Storey: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var xMm = 0
+    public var yMm = 0
+    public var zMm = 0
+}
+
+public struct ProjectRoom: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var storeyID: UUID
+}
+
+public enum ProjectScope: Codable, Equatable, Hashable, Sendable {
+    case room(UUID)
+    case storey(UUID)
+    case home
+}
+
 @Feature
 public struct Workspace {
     public static let loadFailureMessage = "Nie udało się odczytać projektów. Plik pozostaje bez zmian. Spróbuj ponownie lub odzyskaj go z kopii zapasowej."
@@ -229,6 +251,7 @@ public struct Workspace {
             public var expansionMm: String
             public var finish = FloorFinish.oak
             public var isShowing3DPreview = false
+            public var roomID: UUID
             public var floorID: UUID
             public var id: UUID { floorID }
             public var name: String
@@ -250,8 +273,10 @@ public struct Workspace {
                 plankWidthM: String = "0.156",
                 plan: LayoutPlan? = nil,
                 error: String? = nil,
-                accessID: UUID? = nil
+                accessID: UUID? = nil,
+                roomID: UUID? = nil
             ) {
+                self.roomID = roomID ?? accessID ?? id
                 self.accessID = accessID ?? id
                 self.error = error
                 self.expansionMm = expansionMm
@@ -309,6 +334,10 @@ public struct Workspace {
             public var selectedFloorIDs: [UUID]
             public var splitAtM: String
             public var splitAxis: SplitAxis
+            public var storeys: [Storey]
+            public var rooms: [ProjectRoom]
+            public var scope: ProjectScope
+            public var activeStoreyID: UUID
 
             public init(
                 id: UUID,
@@ -328,8 +357,19 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
-                parts: [ModelPart] = []
+                parts: [ModelPart] = [],
+                storeys: [Storey]? = nil,
+                rooms: [ProjectRoom]? = nil,
+                scope: ProjectScope = .home,
+                activeStoreyID: UUID? = nil
             ) {
+                self.storeys = storeys ?? [Storey(id: id, name: "Kondygnacja domyślna")]
+                self.rooms = rooms ?? Dictionary(grouping: floors, by: \.roomID).values.compactMap {
+                    guard let floor = $0.first else { return nil }
+                    return ProjectRoom(id: floor.roomID, name: floor.name, storeyID: id)
+                }.sorted { $0.id.uuidString < $1.id.uuidString }
+                self.scope = scope
+                self.activeStoreyID = activeStoreyID ?? id
                 self.error = error
                 self.floors = floors
                 self.geometryCorrections = geometryCorrections
@@ -419,6 +459,12 @@ public struct Workspace {
                 default:
                     break
                 }
+            }
+            .onChange(of: store.state.scopeInputs) { state in
+                state.floorVariants = []
+                state.undoneFloorVariantIDs = []
+                for index in state.floors.indices { state.floors[index].plan = nil }
+                state.error = nil
             }
             .forEach(\.floors) {
                 Floor()
@@ -649,11 +695,25 @@ public struct Workspace {
                 }
             case .planSelectedFloorsButtonTapped(let projectID):
                 guard let p = state.projects.firstIndex(where: { $0.id == projectID }) else { return }
-                let selected = state.projects[p].selectedFloorIDs
-                guard !selected.isEmpty else { return }
+                state.projects[p].floorVariants = []
+                state.projects[p].undoneFloorVariantIDs = []
+                for index in state.projects[p].floors.indices { state.projects[p].floors[index].plan = nil }
+                let selected: [Floor.State]
+                do {
+                    selected = try state.projects[p].resolvedFloors()
+                    try state.projects[p].validateNonoverlapping(selected)
+                } catch {
+                    state.projects[p].error = error.localizedDescription
+                    return
+                }
+                let accessIDs = Set(selected.map(\.accessID))
+                guard state.hasPro || (accessIDs.count == 1 && (state.freeRoomID == nil || accessIDs.first == state.freeRoomID)) else {
+                    state.isPaywallPresented = true
+                    return
+                }
                 var plans: [(UUID, LayoutPlan)] = []
-                for floorID in selected {
-                    guard let floor = state.projects[p].floors.first(where: { $0.id == floorID }) else { continue }
+                for floor in selected {
+                    let floorID = floor.id
                     do {
                         plans.append((floorID, try floor.makePlan()))
                     } catch {
@@ -667,6 +727,7 @@ public struct Workspace {
                     state.projects[p].floors[f].plan = plan
                     state.projects[p].floors[f].error = nil
                 }
+                if !state.hasPro && state.freeRoomID == nil { state.freeRoomID = accessIDs.first }
                 let packs = plans.compactMap { $0.1.bom.packs }
                 state.projects[p].floorVariants.append(FloorVariant(
                     id: uuid(),
@@ -698,6 +759,7 @@ public struct Workspace {
                     guard let index = state.selectedProjectIndex else { return }
                     let name = state.manualName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let floor = Floor.State(id: uuid(), name: name.isEmpty ? "Pokój" : name, room: room)
+                    try state.projects[index].registerRoom(floor)
                     state.projects[index].floors.append(floor)
                     state.projects[index].selectedFloorIDs = [floor.id]
                     state.manualRoomError = nil
@@ -748,6 +810,7 @@ public struct Workspace {
                             thresholds: capturedRoom.thresholds,
                             windows: capturedRoom.windows
                         )
+                        try state.projects[index].registerRoom(floor)
                         floorIDs.append(floor.floorID)
                         state.projects[index].floors.append(floor)
                     }
@@ -799,6 +862,8 @@ public struct Workspace {
                         plankWidthM: original.plankWidthM,
                         accessID: original.accessID
                     )
+                    first.roomID = original.roomID
+                    second.roomID = original.roomID
                     first.copyMaterial(from: original)
                     second.copyMaterial(from: original)
                     let correction = GeometryCorrection(
@@ -819,6 +884,10 @@ public struct Workspace {
                 let selectedIDs = state.projects[index].selectedFloorIDs
                 let selected = state.projects[index].floors.filter { selectedIDs.contains($0.floorID) }
                 guard selected.count == 2 else { return }
+                guard selected[0].roomID == selected[1].roomID else {
+                    state.projects[index].error = "Nie można łączyć powierzchni różnych pokoi lub kondygnacji."
+                    return
+                }
                 do {
                     let joined = try joinRooms(selected[0].room, selected[1].room)
                     let inputs = selected.map(FloorSnapshot.init)
@@ -833,6 +902,7 @@ public struct Workspace {
                         plankWidthM: selected[0].plankWidthM,
                         accessID: selected[0].accessID == selected[1].accessID ? selected[0].accessID : nil
                     )
+                    item.roomID = selected[0].roomID
                     item.copyMaterial(from: selected[0])
                     let correction = GeometryCorrection(
                         id: uuid(),
@@ -880,7 +950,85 @@ public struct Workspace {
     }
 }
 
+enum ProjectScopeError: LocalizedError {
+    case invalidReferences
+    case empty
+    case overlap
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidReferences: "Zakres zawiera nieaktualne przypisania pokoju lub kondygnacji."
+        case .empty: "Wybrany zakres nie zawiera powierzchni."
+        case .overlap: "Obwiednie powierzchni na tej samej kondygnacji nakładają się. Zweryfikuj geometrię przed obliczeniem."
+        }
+    }
+}
+
+struct ScopeInputs: Equatable {
+    var scope: ProjectScope
+    var storeys: [Storey]
+    var rooms: [ProjectRoom]
+    var floors: [WorkspaceArchive.FloorRecord]
+}
+
 extension Workspace.Project.State {
+    var scopeInputs: ScopeInputs {
+        ScopeInputs(scope: scope, storeys: storeys, rooms: rooms, floors: floors.map(WorkspaceArchive.FloorRecord.init))
+    }
+
+    func validateReferences() throws {
+        let storeyIDs = Set(storeys.map(\.id))
+        let roomIDs = Set(rooms.map(\.id))
+        guard !storeys.isEmpty, storeyIDs.count == storeys.count,
+              roomIDs.count == rooms.count,
+              Set(floors.map(\.id)).count == floors.count,
+              storeyIDs.contains(activeStoreyID),
+              rooms.allSatisfy({ storeyIDs.contains($0.storeyID) }),
+              floors.allSatisfy({ roomIDs.contains($0.roomID) }) else {
+            throw ProjectScopeError.invalidReferences
+        }
+        switch scope {
+        case .room(let id): guard roomIDs.contains(id) else { throw ProjectScopeError.invalidReferences }
+        case .storey(let id): guard storeyIDs.contains(id) else { throw ProjectScopeError.invalidReferences }
+        case .home: break
+        }
+    }
+
+    func resolvedFloors() throws -> [Workspace.Floor.State] {
+        try validateReferences()
+        let result = floors.filter { floor in
+            switch scope {
+            case .home: return true
+            case .room(let id): return floor.roomID == id
+            case .storey(let id): return rooms.contains { $0.id == floor.roomID && $0.storeyID == id }
+            }
+        }
+        guard !result.isEmpty else { throw ProjectScopeError.empty }
+        return result
+    }
+
+    func storey(for floor: Workspace.Floor.State) -> Storey? {
+        guard let room = rooms.first(where: { $0.id == floor.roomID }) else { return nil }
+        return storeys.first { $0.id == room.storeyID }
+    }
+
+    func validateNonoverlapping(_ selected: [Workspace.Floor.State]) throws {
+        for (index, floor) in selected.enumerated() {
+            let a = bbox(floor.room)
+            for other in selected.dropFirst(index + 1) where storey(for: floor)?.id == storey(for: other)?.id {
+                let b = bbox(other.room)
+                if max(a.minX, b.minX) < min(a.maxX, b.maxX) && max(a.minY, b.minY) < min(a.maxY, b.maxY) {
+                    throw ProjectScopeError.overlap
+                }
+            }
+        }
+    }
+
+    mutating func registerRoom(_ floor: Workspace.Floor.State) throws {
+        guard storeys.contains(where: { $0.id == activeStoreyID }) else { throw ProjectScopeError.invalidReferences }
+        rooms.append(ProjectRoom(id: floor.roomID, name: floor.name, storeyID: activeStoreyID))
+    }
+
     mutating func detachPart(_ id: UUID) {
         parts.removeAll { $0.id == id }
         error = nil
@@ -893,6 +1041,8 @@ extension Workspace.State {
         if value { isPaywallPresented = false }
         if !value {
             for p in projects.indices {
+                projects[p].floorVariants = []
+                projects[p].undoneFloorVariantIDs = []
                 for f in projects[p].floors.indices where projects[p].floors[f].accessID != freeRoomID {
                     projects[p].floors[f].plan = nil
                 }
