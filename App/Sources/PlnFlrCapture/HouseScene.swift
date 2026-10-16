@@ -3,6 +3,9 @@ import ModelIO
 import SceneKit
 import SceneKit.ModelIO
 import simd
+#if os(macOS)
+import AppKit
+#endif
 #if os(iOS)
 import RoomPlan
 import UIKit
@@ -19,9 +22,37 @@ public struct ScenePoint: Codable, Equatable, Sendable {
     }
 }
 
-public enum RecordState: String, Codable, Equatable, Sendable { case existing, planned }
-public enum UtilitySource: String, Codable, Equatable, Sendable { case measurement, discovery, document, photo, other }
-public enum UtilityConfidence: String, Codable, Equatable, Sendable { case confirmed, approximate, unverified }
+public enum RecordState: String, Codable, Equatable, Sendable, CaseIterable {
+    case existing, planned
+    public var label: String {
+        switch self {
+        case .existing: "Istniejąca"
+        case .planned: "Planowana"
+        }
+    }
+}
+public enum UtilitySource: String, Codable, Equatable, Sendable, CaseIterable {
+    case measurement, discovery, document, photo, other
+    public var label: String {
+        switch self {
+        case .measurement: "Pomiar"
+        case .discovery: "Odkrycie"
+        case .document: "Dokumentacja"
+        case .photo: "Zdjęcie"
+        case .other: "Inne źródło"
+        }
+    }
+}
+public enum UtilityConfidence: String, Codable, Equatable, Sendable, CaseIterable {
+    case confirmed, approximate, unverified
+    public var label: String {
+        switch self {
+        case .confirmed: "Potwierdzone"
+        case .approximate: "Przybliżone"
+        case .unverified: "Niezweryfikowane"
+        }
+    }
+}
 
 public struct WallSegment: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
@@ -39,6 +70,8 @@ public struct WallSegment: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct UtilityRoute: Codable, Equatable, Sendable, Identifiable {
+    public static let colors = ["blue", "red", "green", "yellow", "orange", "purple", "gray", "black", "white"]
+    public static let colorLabels = ["blue": "Niebieski", "red": "Czerwony", "green": "Zielony", "yellow": "Żółty", "orange": "Pomarańczowy", "purple": "Fioletowy", "gray": "Szary", "black": "Czarny", "white": "Biały"]
     public var id: UUID
     public var name: String
     public var colorName: String
@@ -362,6 +395,24 @@ public enum HouseScene {
         for route in routes {
             let node = SCNNode()
             node.name = "utility.\(route.id.uuidString).\(route.confidence.rawValue)"
+            #if os(iOS)
+            let colors: [String: UIColor] = ["blue": .systemBlue, "red": .systemRed, "green": .systemGreen, "yellow": .systemYellow, "orange": .systemOrange, "purple": .systemPurple, "gray": .systemGray, "black": .black, "white": .white]
+            #else
+            let colors: [String: NSColor] = ["blue": .systemBlue, "red": .systemRed, "green": .systemGreen, "yellow": .systemYellow, "orange": .systemOrange, "purple": .systemPurple, "gray": .systemGray, "black": .black, "white": .white]
+            #endif
+            for (start, end) in zip(route.points, route.points.dropFirst()) where route.diameterMm > 0 {
+                let a = SIMD3<Double>(Double(start.xMm), Double(start.zMm), Double(start.yMm)) / 1000
+                let b = SIMD3<Double>(Double(end.xMm), Double(end.zMm), Double(end.yMm)) / 1000
+                let delta = b - a
+                let length = simd_length(delta)
+                guard length > 0 else { continue }
+                let cylinder = SCNCylinder(radius: Double(route.diameterMm) / 2000, height: length)
+                cylinder.firstMaterial?.diffuse.contents = colors[route.colorName] ?? colors["gray"]
+                let segment = SCNNode(geometry: cylinder)
+                segment.simdPosition = SIMD3<Float>((a + b) / 2)
+                segment.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: SIMD3<Float>(delta / length))
+                node.addChildNode(segment)
+            }
             scene.rootNode.addChildNode(node)
         }
         for item in furniture where !item.hidden {
@@ -369,6 +420,23 @@ public enum HouseScene {
             node.name = "furniture.\(item.id.uuidString)"
             node.position = SCNVector3(Double(item.origin.xMm) / 1000, Double(item.origin.zMm) / 1000, Double(item.origin.yMm) / 1000)
             scene.rootNode.addChildNode(node)
+        }
+        if !scene.rootNode.childNodes.isEmpty {
+            let bounds = scene.rootNode.boundingBox
+            let minimum = SIMD3<Double>(Double(bounds.min.x), Double(bounds.min.y), Double(bounds.min.z))
+            let maximum = SIMD3<Double>(Double(bounds.max.x), Double(bounds.max.y), Double(bounds.max.z))
+            let center = (minimum + maximum) / 2
+            let radius = max(simd_length(maximum - minimum) / 2, 0.1)
+            let distance = radius / sin(Double.pi / 8) * 1.2
+            let camera = SCNNode()
+            camera.name = "utilities.camera"
+            camera.camera = SCNCamera()
+            camera.camera?.fieldOfView = 45
+            camera.camera?.zNear = max(radius / 1000, 0.001)
+            camera.camera?.zFar = distance + radius * 4
+            camera.position = SCNVector3(center.x + distance / 2, center.y + distance / 2, center.z + distance)
+            camera.look(at: SCNVector3(center.x, center.y, center.z))
+            scene.rootNode.addChildNode(camera)
         }
         return scene
     }
