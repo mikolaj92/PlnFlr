@@ -167,7 +167,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var state: Workspace.Floor.State {
             var state = Workspace.Floor.State(id: id, name: name, room: room, thresholds: thresholds, windows: windows,
                   expansionMm: expansionMm, plankLengthM: plankLengthM, plankWidthM: plankWidthM, accessID: accessID)
-            state.storey = storey
+            state.storey = storey?.isEmpty == false ? storey : "Kondygnacja 1"
             state.material = material
             state.packSize = packSize
             state.groutMm = groutMm
@@ -194,6 +194,10 @@ public struct WorkspaceStorage: Sendable {
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
         for project in archive.projects {
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
+            guard Set(project.furniture.map(\.id)).count == project.furniture.count,
+                  project.furniture.allSatisfy({ item in
+                      item.roomID == nil || project.floors.contains(where: { $0.id == item.roomID })
+                  }) else { throw FurnitureInputError.invalid }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
             for variant in project.floorVariants where variant.before != nil {
