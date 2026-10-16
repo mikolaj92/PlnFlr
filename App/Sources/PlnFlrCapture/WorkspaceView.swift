@@ -737,6 +737,15 @@ struct HouseCanvas: View {
                 var shape = path(self.vertices(floor.room.outer.vertices, floor: floor), point)
                 for hole in floor.room.holes { shape.addPath(path(self.vertices(hole.vertices, floor: floor), point)) }
                 context.fill(shape, with: .color(selected ? .orange.opacity(0.35) : .secondary.opacity(0.15)), style: FillStyle(eoFill: true))
+                if let plan = floor.plan {
+                    for piece in plan.pieces {
+                        let outline = path(self.vertices(piece.geometry, floor: floor), point)
+                        let colors = floor.material == .tile ? stonePreviewColors : floor.finish.previewColors
+                        let color = Color(hex: colors[piece.rowIndex.isMultiple(of: 2) ? 0 : 1])
+                        context.fill(outline, with: .color(color.opacity(0.88)))
+                        context.stroke(outline, with: .color(.primary.opacity(0.4)), lineWidth: 0.5)
+                    }
+                }
                 context.stroke(shape, with: .color(selected ? .orange : .primary.opacity(0.5)), lineWidth: selected ? 2 : 1)
             }
         }

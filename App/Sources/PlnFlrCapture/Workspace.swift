@@ -984,7 +984,10 @@ extension Workspace.Project.State {
               Set(floors.map(\.id)).count == floors.count,
               storeyIDs.contains(activeStoreyID),
               rooms.allSatisfy({ storeyIDs.contains($0.storeyID) }),
-              floors.allSatisfy({ roomIDs.contains($0.roomID) }) else {
+              floors.allSatisfy({ roomIDs.contains($0.roomID) }),
+              geometryCorrections.allSatisfy({ correction in
+                  (correction.before + correction.after).allSatisfy { roomIDs.contains($0.roomID ?? $0.accessID) }
+              }) else {
             throw ProjectScopeError.invalidReferences
         }
         switch scope {

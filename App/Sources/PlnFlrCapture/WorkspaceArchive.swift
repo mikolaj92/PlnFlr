@@ -93,7 +93,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
             storeys = try container.decodeIfPresent([Storey].self, forKey: .storeys) ?? [Storey(id: id, name: "Kondygnacja domyślna")]
             let defaultStoreyID = id
-            rooms = try container.decodeIfPresent([ProjectRoom].self, forKey: .rooms) ?? Dictionary(grouping: floors, by: { $0.roomID ?? $0.accessID }).map { key, values in
+            let roomFloors = floors.map(\.state) + geometryCorrections.flatMap { ($0.before + $0.after).map(\.state) }
+            rooms = try container.decodeIfPresent([ProjectRoom].self, forKey: .rooms) ?? Dictionary(grouping: roomFloors, by: \.roomID).map { key, values in
                 ProjectRoom(id: key, name: values[0].name, storeyID: defaultStoreyID)
             }.sorted { $0.id.uuidString < $1.id.uuidString }
             scope = try container.decodeIfPresent(ProjectScope.self, forKey: .scope) ?? .home
