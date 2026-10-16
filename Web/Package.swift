@@ -14,7 +14,6 @@ let package = Package(
     dependencies: [
         .package(path: "../Kernel"),
         .package(url: "https://github.com/vapor/vapor.git", exact: "5.0.0-beta.2"),
-        .package(url: "https://github.com/apple/swift-distributed-tracing.git", exact: "1.5.0"),
     ],
     targets: [
         .target(

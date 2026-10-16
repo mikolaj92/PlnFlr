@@ -105,12 +105,23 @@ public struct WorkspaceView: View {
     @ViewBuilder
     private var detail: some View {
         if let project = currentProject, let projectStore = currentProjectStore {
+            let scopeResolution = Result { try project.resolvedFloors() }
+            let scopeError: String? = switch scopeResolution {
+            case .success: nil
+            case .failure(let error): error.localizedDescription
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
                     ProjectScopeView(store: projectStore)
                     Button("Policz wybrany zakres") { store.send(.planSelectedFloorsButtonTapped(project.id)) }
-                        .disabled((try? project.resolvedFloors()) == nil)
+                        .disabled(scopeError != nil)
+                    if let scopeError {
+                        Label(scopeError, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("scopeResolutionError")
+                        Text("Wybierz inny zakres lub sprawdź przypisania pokoi do kondygnacji. Jeśli brakuje powierzchni, dodaj pokój lub zaimportuj skan.")
+                    }
                     if let variant = project.floorVariants.last(where: { !project.undoneFloorVariantIDs.contains($0.id) }) {
                         Text("\(FloorVariant.sumLabel): \(variant.pieces) elementów, netto \(variant.areaNetMm2) mm²")
                     }
@@ -125,10 +136,12 @@ public struct WorkspaceView: View {
                         }
                         WelcomeView(store: store)
                     } else {
-                        HouseCanvas(floors: (try? project.resolvedFloors()) ?? [], selectedID: nil, storeys: project.storeys, rooms: project.rooms)
-                            .frame(height: 220)
-                            .padding()
-                            .background(.quaternary, in: .rect(cornerRadius: 16))
+                        if case .success(let floors) = scopeResolution {
+                            HouseCanvas(floors: floors, selectedID: nil, storeys: project.storeys, rooms: project.rooms)
+                                .frame(height: 220)
+                                .padding()
+                                .background(.quaternary, in: .rect(cornerRadius: 16))
+                        }
                         RoomSelectionView(store: projectStore)
                         if let message = project.error ?? store.error {
                             Label(message, systemImage: "exclamationmark.triangle")
@@ -593,7 +606,7 @@ private struct SplitControlsView: View {
             HStack {
                 Button("Podziel", action: split).disabled(store.selectedFloorIDs.count != 1)
                 Button("Połącz", action: join).disabled(store.selectedFloorIDs.count != 2)
-                Button("Policz zakres", action: planSelection).disabled((try? store.state.resolvedFloors()) == nil)
+                Button("Policz zakres", action: planSelection)
             }.buttonStyle(.bordered)
             if let variant = store.floorVariants.last(where: { !store.undoneFloorVariantIDs.contains($0.id) }) {
                 Text("\(FloorVariant.sumLabel): \(variant.pieces) elementów, netto \(variant.areaNetMm2) mm²")
