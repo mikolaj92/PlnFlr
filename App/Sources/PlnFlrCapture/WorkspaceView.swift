@@ -207,11 +207,14 @@ private struct ScanSceneView: View {
             Text("Ustawienie zmienia tylko podgląd źródła. Podłogi i obliczenia pozostają bez zmian.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .onChange(of: scans, initial: true) { _, value in
-            let preview = HouseScene.scans(value, selection: selection)
-            scene = preview.scene
-            errors = preview.errors
-        }
+        .onChange(of: scans, initial: true) { _, _ in refreshScene() }
+        .onChange(of: selection) { _, _ in refreshScene() }
+    }
+
+    private func refreshScene() {
+        let preview = HouseScene.scans(scans, selection: selection)
+        scene = preview.scene
+        errors = preview.errors
     }
 }
 
