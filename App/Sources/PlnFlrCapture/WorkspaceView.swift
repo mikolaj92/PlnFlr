@@ -222,30 +222,32 @@ private struct RoomPlanSourceListView: View {
     private var listed: [Workspace.Scan.State] { scans }
 
     var body: some View {
-        #if os(iOS)
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(listed, id: \.id) { scan in
-                sourceCard(scan)
+        Group {
+            #if os(iOS)
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(listed, id: \.id) { scan in
+                    sourceCard(scan)
+                }
             }
-        }
-        .quickLookPreview($previewURL)
-        .accessibilityIdentifier("roomPlan3DSourceList")
-        #else
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(listed, id: \.id) { scan in
-                sourceCard(scan)
+            .quickLookPreview($previewURL)
+            .accessibilityIdentifier("roomPlan3DSourceList")
+            #else
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(listed, id: \.id) { scan in
+                    sourceCard(scan)
+                }
             }
-        }
-        .accessibilityIdentifier("roomPlan3DSourceList")
-        .sheet(item: $selectedScan) { scan in
-            VStack {
-                ScanSceneView(scans: [scan])
-                Button("Zamknij") { selectedScan = nil }
+            .accessibilityIdentifier("roomPlan3DSourceList")
+            .sheet(item: $selectedScan) { scan in
+                VStack {
+                    ScanSceneView(scans: [scan])
+                    Button("Zamknij") { selectedScan = nil }
+                }
+                .padding()
+                .frame(minWidth: 480, minHeight: 440)
             }
-            .padding()
-            .frame(minWidth: 480, minHeight: 440)
+            #endif
         }
-        #endif
         .onChange(of: previewURL) { oldURL, _ in
             if let oldURL { try? FileManager.default.removeItem(at: oldURL) }
         }
