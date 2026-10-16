@@ -105,6 +105,7 @@ public struct WorkspaceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
+                    UtilitiesView(store: projectStore)
                     if !project.scans.isEmpty {
                         ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
@@ -193,6 +194,122 @@ private struct ProjectHeaderView: View {
         TextField("Nazwa projektu", text: $store.name)
             .font(.title.bold())
             .accessibilityIdentifier("projectName")
+    }
+}
+
+private struct UtilitiesView: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+    @State private var draft: UtilityRouteDraft?
+    @State private var scene: SCNScene?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Instalacje").font(.headline)
+            if store.utilities.isEmpty {
+                Text("Przebieg instalacji nieznany")
+            } else {
+                if let scene {
+                    SceneView(scene: scene, pointOfView: scene.rootNode.childNode(withName: "utilities.camera", recursively: false),
+                              options: [.allowsCameraControl, .autoenablesDefaultLighting], preferredFramesPerSecond: 30)
+                        .frame(height: 360)
+                        .accessibilityLabel("Trasy instalacji 3D. Przeciągnij, aby obrócić widok.")
+                }
+                ForEach(store.utilities) { route in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(route.name).font(.headline)
+                        Text("Średnica: \(route.diameterMm) mm · Kolor: \(UtilityRoute.colorLabels[route.colorName] ?? route.colorName)")
+                        Text("Stan: \(route.state.label) · Źródło: \(route.source.label) · Pewność: \(route.confidence.label)")
+                        Button("Edytuj trasę: \(route.name)") { draft = UtilityRouteDraft(route: route) }
+                    }
+                }
+            }
+            Text("Mapa nie potwierdza kompletności instalacji ani bezpieczeństwa wiercenia.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Dodaj trasę instalacji") { draft = UtilityRouteDraft() }
+        }
+        .onChange(of: store.utilities, initial: true) { _, routes in
+            scene = HouseScene.scene(walls: [], routes: routes, furniture: [])
+        }
+        .sheet(item: $draft) { value in
+            UtilityRouteEditor(store: store, draft: value)
+        }
+    }
+}
+
+private struct UtilityRouteEditor: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+    @State var draft: UtilityRouteDraft
+    @State private var error: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Nazwa trasy", text: $draft.name)
+                Picker("Kolor", selection: $draft.colorName) {
+                    ForEach(UtilityRoute.colors, id: \.self) { color in
+                        Text(UtilityRoute.colorLabels[color] ?? color).tag(color)
+                    }
+                    if !UtilityRoute.colors.contains(draft.colorName) {
+                        Text("Nieobsługiwany: \(draft.colorName)").tag(draft.colorName)
+                    }
+                }
+                TextField("Średnica (mm)", text: $draft.diameter)
+                Picker("Stan", selection: $draft.state) {
+                    Text("Wybierz stan").tag(Optional<RecordState>.none)
+                    ForEach(RecordState.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                }
+                Picker("Źródło", selection: $draft.source) {
+                    Text("Wybierz źródło").tag(Optional<UtilitySource>.none)
+                    ForEach(UtilitySource.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                }
+                Picker("Pewność", selection: $draft.confidence) {
+                    Text("Wybierz pewność").tag(Optional<UtilityConfidence>.none)
+                    ForEach(UtilityConfidence.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                }
+                Section("Punkty w kolejności trasy (mm)") {
+                    Text("X i Y: położenie na podłodze. Z: wysokość.")
+                    ForEach($draft.points) { $point in
+                        VStack(alignment: .leading) {
+                            Text("Punkt \((draft.points.firstIndex(where: { $0.id == point.id }) ?? 0) + 1)")
+                            TextField("X (mm)", text: $point.x)
+                            TextField("Y (mm)", text: $point.y)
+                            TextField("Z (mm)", text: $point.z)
+                            Button("Usuń punkt", role: .destructive) {
+                                draft.points.removeAll { $0.id == point.id }
+                            }
+                        }
+                    }
+                    Button("Dodaj punkt") { draft.points.append(UtilityRouteDraft.Point()) }
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            .navigationTitle(draft.routeID == nil ? "Nowa trasa" : "Edycja trasy")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Anuluj") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        do {
+                            _ = try draft.validatedRoute(id: draft.routeID ?? draft.id)
+                            store.send(.saveUtility(draft))
+                            if let message = store.utilityError {
+                                error = message
+                            } else {
+                                dismiss()
+                            }
+                        } catch {
+                            self.error = error.localizedDescription
+                        }
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 320, minHeight: 480)
     }
 }
 

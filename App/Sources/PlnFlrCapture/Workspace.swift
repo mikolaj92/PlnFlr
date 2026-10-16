@@ -175,6 +175,66 @@ public struct ModelPart: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+public struct UtilityRouteDraft: Identifiable, Equatable, Sendable {
+    public struct Point: Identifiable, Equatable, Sendable {
+        public var id = UUID()
+        public var x = ""
+        public var y = ""
+        public var z = ""
+    }
+
+    public var id: UUID
+    public var routeID: UUID?
+    public var name: String
+    public var colorName: String
+    public var diameter: String
+    public var points: [Point]
+    public var state: RecordState?
+    public var source: UtilitySource?
+    public var confidence: UtilityConfidence?
+
+    public init(route: UtilityRoute? = nil) {
+        id = UUID()
+        routeID = route?.id
+        name = route?.name ?? ""
+        colorName = route?.colorName ?? "blue"
+        diameter = route.map { String($0.diameterMm) } ?? ""
+        points = route?.points.map { Point(x: String($0.xMm), y: String($0.yMm), z: String($0.zMm)) } ?? [Point(), Point()]
+        state = route?.state
+        source = route?.source
+        confidence = route?.confidence
+    }
+
+    public func validatedRoute(id: UUID) throws -> UtilityRoute {
+        let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else { throw ValidationError(message: "Podaj nazwę trasy.") }
+        guard UtilityRoute.colors.contains(colorName) else { throw ValidationError(message: "Wybierz obsługiwany kolor.") }
+        guard let diameterMm = Int(diameter), diameterMm > 0 else {
+            throw ValidationError(message: "Średnica musi być dodatnią liczbą całkowitą w milimetrach.")
+        }
+        guard let state, let source, let confidence else {
+            throw ValidationError(message: "Wybierz stan, źródło i pewność trasy.")
+        }
+        let coordinates = try points.enumerated().map { index, point in
+            guard let x = Int(point.x), let y = Int(point.y), let z = Int(point.z) else {
+                throw ValidationError(message: "Punkt \(index + 1): podaj X, Y i Z jako całkowite milimetry.")
+            }
+            return ScenePoint(xMm: x, yMm: y, zMm: z)
+        }
+        guard coordinates.count >= 2,
+              zip(coordinates, coordinates.dropFirst()).allSatisfy({ $0 != $1 }) else {
+            throw ValidationError(message: "Dodaj co najmniej dwa punkty. Kolejne punkty muszą być różne.")
+        }
+        return UtilityRoute(id: id, name: label, colorName: colorName, diameterMm: diameterMm,
+                            points: coordinates, state: state, source: source, confidence: confidence)
+    }
+
+    private struct ValidationError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+}
+
 @Feature
 public struct Workspace {
     public static let loadFailureMessage = "Nie udało się odczytać projektów. Plik pozostaje bez zmian. Spróbuj ponownie lub odzyskaj go z kopii zapasowej."
@@ -303,6 +363,7 @@ public struct Workspace {
             public var undoneFloorVariantIDs: [UUID]
             public var walls: [WallSegment]
             public var utilities: [UtilityRoute]
+            public var utilityError: String?
             public var furniture: [FurnitureItem]
             public var parts: [ModelPart]
             public var id: UUID { projectID }
@@ -362,8 +423,11 @@ public struct Workspace {
             case undoLastFloorVariantButtonTapped
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
+            case saveUtility(UtilityRouteDraft)
             case undoLastPartButtonTapped
         }
+
+        @FeatureEnvironment(\.uuid) var uuid
 
         public init() {}
 
@@ -386,6 +450,18 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
+                case .saveUtility(let draft):
+                    do {
+                        let route = try draft.validatedRoute(id: draft.routeID ?? uuid())
+                        if let index = state.utilities.firstIndex(where: { $0.id == route.id }) {
+                            state.utilities[index] = route
+                        } else {
+                            state.utilities.append(route)
+                        }
+                        state.utilityError = nil
+                    } catch {
+                        state.utilityError = error.localizedDescription
+                    }
                 case .extractPart(let scanID, let name, let paths):
                     do {
                         guard let scan = state.scans.first(where: { $0.id == scanID }) else {
