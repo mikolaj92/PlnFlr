@@ -35,8 +35,13 @@ enum RoomPlanStructurePreview {
     static func exportURL(_ source: RoomPlanStructureSource) throws -> URL {
         let structure = try JSONDecoder().decode(RoomPlan.CapturedStructure.self, from: source.structure)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).usdz")
-        try structure.export(to: url, exportOptions: .mesh)
-        return url
+        do {
+            try structure.export(to: url, exportOptions: .mesh)
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
     }
 }
 #endif
