@@ -138,6 +138,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var accessID: UUID
         var id: UUID
         var name: String
+        var storey: String?
         var room: Room
         var thresholds: [Threshold]
         var windows: [Opening]
@@ -153,6 +154,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             accessID = state.accessID
             id = state.id
             name = state.name
+            storey = state.storey
             room = state.room
             thresholds = state.thresholds
             windows = state.windows
@@ -165,6 +167,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var state: Workspace.Floor.State {
             var state = Workspace.Floor.State(id: id, name: name, room: room, thresholds: thresholds, windows: windows,
                   expansionMm: expansionMm, plankLengthM: plankLengthM, plankWidthM: plankWidthM, accessID: accessID)
+            state.storey = storey
             state.material = material
             state.packSize = packSize
             state.groutMm = groutMm
@@ -190,6 +193,24 @@ public struct WorkspaceStorage: Sendable {
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
         for project in archive.projects {
+            guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
+            let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
+            guard active.count <= 1 else { throw MaterialInputError.invalid }
+            for variant in project.floorVariants where variant.before != nil {
+                guard let before = variant.before, let inputs = variant.inputs,
+                      !variant.floorIDs.isEmpty,
+                      Set(variant.floorIDs).count == variant.floorIDs.count,
+                      Set(before.map(\.id)) == Set(variant.floorIDs),
+                      before.count == variant.floorIDs.count,
+                      inputs.count == before.count,
+                      Set(inputs.map(\.id)) == Set(variant.floorIDs) else { throw MaterialInputError.invalid }
+                if active.contains(where: { $0.id == variant.id }) {
+                    guard Set(variant.floorIDs).isSubset(of: Set(project.floors.map(\.id))) else { throw MaterialInputError.invalid }
+                }
+                for snapshot in before + inputs {
+                    try validateRoom(outer: snapshot.room.outer.vertices, holes: snapshot.room.holes.map(\.vertices))
+                }
+            }
             for floor in project.floors {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }

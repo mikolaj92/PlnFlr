@@ -129,11 +129,26 @@ public struct WorkspaceView: View {
                                 .foregroundStyle(.red)
                                 .accessibilityIdentifier("workspaceError")
                         }
-                        if project.selectedFloorIDs.count == 1,
-                           let id = project.selectedFloorIDs.first,
-                           let floor = projectStore.scope(\.floors).first(where: { $0.floorID == id }) {
-                            FloorView(store: floor, locked: !store.hasPro && store.freeRoomID != nil && store.freeRoomID != floor.accessID) {
-                                store.send(.planFloorButtonTapped(project.id, id))
+                        HStack {
+                            Button("Utwórz wariant podłogi") { store.send(.createFloorVariantButtonTapped(project.id)) }
+                                .disabled(project.activeFloorVariant != nil || project.selectedFloorIDs.isEmpty)
+                            Button("Policz zakres") { store.send(.planSelectedFloorsButtonTapped(project.id)) }
+                                .disabled(project.selectedFloorIDs.isEmpty)
+                            if project.activeFloorVariant != nil {
+                                Button("Cofnij wariant podłogi") { projectStore.send(.undoLastFloorVariantButtonTapped) }
+                            }
+                        }
+                        Text("Zakres: \(project.selectedFloorIDs.count) powierzchni. \(FloorVariant.sumLabel). Bez optymalizacji odpadów między pokojami.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if let floors = project.selectedPlans {
+                            Text("Netto \(approximateArea(floors.reduce(0) { $0 + ($1.plan?.bom.areaNetMm2 ?? 0) })) · materiał \(approximateArea(floors.reduce(0) { $0 + ($1.plan?.bom.areaBoughtMm2 ?? 0) }))")
+                            Text("Elementy: \(floors.reduce(0) { $0 + ($1.plan?.bom.pieces ?? 0) }). Paczki i materiał osobno dla każdego pokoju.")
+                        }
+                        ForEach(projectStore.scope(\.floors).filter { project.selectedFloorIDs.contains($0.floorID) }) { floor in
+                            FloorView(store: floor,
+                                      locked: !store.hasPro && store.freeRoomID != nil && store.freeRoomID != floor.accessID,
+                                      editable: project.activeFloorVariant?.floorIDs.contains(floor.floorID) == true) {
+                                store.send(.planFloorButtonTapped(project.id, floor.floorID))
                             }
                         }
                         DisclosureGroup("Podział i łączenie powierzchni") {
@@ -143,6 +158,7 @@ public struct WorkspaceView: View {
                                 undo: { projectStore.send(.undoLastGeometryCorrectionButtonTapped) },
                                 planSelection: { store.send(.planSelectedFloorsButtonTapped(project.id)) },
                                 undoVariant: { projectStore.send(.undoLastFloorVariantButtonTapped) })
+                                .disabled(project.activeFloorVariant != nil)
                         }
                     }
                 }
@@ -493,7 +509,15 @@ private struct RoomSelectionView: View {
     @Bindable var store: StoreOf<Workspace.Project>
     var body: some View {
         VStack(alignment: .leading) {
-            Text("Wybierz pokój").font(.headline)
+            Text("Wybierz zakres").font(.headline)
+            HStack {
+                Button("Cały dom") { $store.selectedFloorIDs.wrappedValue = store.floors.map(\.id) }
+                ForEach(Array(Set(store.floors.compactMap(\.storey).filter { !$0.isEmpty })).sorted(), id: \.self) { storey in
+                    Button(storey) {
+                        $store.selectedFloorIDs.wrappedValue = store.floors.filter { $0.storey == storey }.map(\.id)
+                    }
+                }
+            }
             ScrollView(.horizontal) {
                 HStack {
                     ForEach(store.floors, id: \.floorID) { floor in
@@ -542,10 +566,9 @@ private struct SplitControlsView: View {
                 Button("Połącz", action: join).disabled(store.selectedFloorIDs.count != 2)
                 Button("Policz zaznaczone", action: planSelection).disabled(store.selectedFloorIDs.isEmpty)
             }.buttonStyle(.bordered)
-            if let variant = store.floorVariants.last(where: { !store.undoneFloorVariantIDs.contains($0.id) }) {
-                Text("\(FloorVariant.sumLabel): \(variant.pieces) elementów, netto \(variant.areaNetMm2) mm²")
+            ForEach(store.floorVariants.filter { $0.before == nil }) { variant in
+                Text("Historyczna suma: \(variant.pieces) elementów, netto \(approximateArea(variant.areaNetMm2)). Bez migawki do cofnięcia.")
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Cofnij wariant podłogi") { undoVariant() }
             }
         }.padding(.top)
     }
@@ -564,19 +587,31 @@ extension Array where Element == UUID {
 public struct FloorView: View {
     @Bindable public var store: StoreOf<Workspace.Floor>
     public var locked: Bool
+    public var editable: Bool
     public var onPlan: () -> Void
 
-    public init(store: StoreOf<Workspace.Floor>, locked: Bool = false, onPlan: @escaping () -> Void) {
+    public init(store: StoreOf<Workspace.Floor>, locked: Bool = false, editable: Bool = true, onPlan: @escaping () -> Void) {
         self.store = store
         self.locked = locked
+        self.editable = editable
         self.onPlan = onPlan
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             TextField("Nazwa pokoju", text: $store.name).font(.title2.bold())
-            Text("Ustaw materiał").font(.headline)
-            Picker("Wykończenie", selection: $store.finish) {
+            TextField("Kondygnacja (pusta = nieznana)", text: Binding(
+                get: { store.storey ?? "" },
+                set: { value in
+                    let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    $store.storey.wrappedValue = name.isEmpty ? nil : name
+                }
+            ))
+            Text(editable ? "Wariant podłogi" : "Stan obecny — utwórz wariant przed edycją materiału").font(.headline)
+            Text("Ilości są szacunkiem zależnym od geometrii i wymiarów. Kolor podglądu nie oznacza produktu ani ceny.")
+                .font(.caption).foregroundStyle(.secondary)
+            Group {
+            Picker("Kolor podglądu", selection: $store.finish) {
                 Text("Dąb").tag(FloorFinish.oak)
                 Text("Orzech").tag(FloorFinish.walnut)
             }.pickerStyle(.segmented)
@@ -591,6 +626,8 @@ public struct FloorView: View {
                 field("Sztuk w paczce", text: $store.packSize)
                 if store.material == .tile { field("Fuga (mm)", text: $store.groutMm) }
             }
+            }
+            .disabled(!editable || locked)
             Button(locked ? "Odblokuj kolejne pokoje" : "Ułóż podłogę", systemImage: locked ? "lock" : "square.grid.3x3", action: onPlan)
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("planFloor")
@@ -602,6 +639,7 @@ public struct FloorView: View {
                     Text("Plan ułożenia").font(.title2.bold())
                     Text("Elementy: \(plan.bom.pieces) · sztuki materiału: \(plan.bom.fullBoards) · paczki: \(plan.bom.packs.map(String.init) ?? "—")")
                         .accessibilityIdentifier("planSummary")
+                    Text("Netto \(approximateArea(plan.bom.areaNetMm2)) · materiał \(approximateArea(plan.bom.areaBoughtMm2))")
                     Text("Odpad: \(plan.bom.wastePct)%")
                     Text(plan.rationalePl).foregroundStyle(.secondary)
                     Picker("Podgląd", selection: $store.isShowing3DPreview) {

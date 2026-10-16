@@ -6,6 +6,7 @@ import PlnFlrLayout
 public struct FloorSnapshot: Codable, Equatable, Sendable {
     public let id: UUID
     public let name: String
+    public let storey: String?
     public let room: Room
     public let thresholds: [Threshold]
     public let windows: [Opening]
@@ -21,6 +22,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
     public init(_ state: Workspace.Floor.State) {
         id = state.id
         name = state.name
+        storey = state.storey
         room = state.room
         thresholds = state.thresholds
         windows = state.windows
@@ -46,6 +48,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
             plankWidthM: plankWidthM,
             accessID: accessID
         )
+        state.storey = storey
         state.material = material
         state.packSize = packSize
         state.groutMm = groutMm
@@ -107,6 +110,9 @@ public struct FloorVariant: Codable, Equatable, Sendable, Identifiable {
     public let fullBoards: Int
     public let pieces: Int
     public let packs: Int?
+    public var before: [FloorSnapshot]?
+    public var inputs: [FloorSnapshot]?
+    public var selectedFloorIDsBefore: [UUID]?
 
     public init(id: UUID, floorIDs: [UUID], areaNetMm2: Int, areaBoughtMm2: Int, fullBoards: Int, pieces: Int, packs: Int?) {
         self.id = id
@@ -232,6 +238,7 @@ public struct Workspace {
             public var floorID: UUID
             public var id: UUID { floorID }
             public var name: String
+            public var storey: String?
             public var plan: LayoutPlan?
             public var plankLengthM: String
             public var plankWidthM: String
@@ -271,17 +278,13 @@ public struct Workspace {
         public var body: some Feature {
             Update { _, _ in }
                 .onChange(of: WorkspaceArchive.FloorRecord(store.state)) { state in
-                    guard state.plan != nil else {
-                        state.error = nil
-                        return
-                    }
-                    state.plan = nil
+                    guard state.plan != nil else { return }
                     do {
                         state.plan = try state.makePlan()
                         state.error = nil
                     } catch {
                         state.plan = nil
-                        state.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        state.error = error.localizedDescription
                     }
                 }
         }
@@ -367,6 +370,7 @@ public struct Workspace {
         public var body: some Feature {
             Update { state, action in
                 guard case .undoLastGeometryCorrectionButtonTapped = action,
+                      state.activeFloorVariant == nil,
                       let correction = state.geometryCorrections.last(where: {
                           !state.undoneGeometryCorrectionIDs.contains($0.id)
                       }),
@@ -411,9 +415,17 @@ public struct Workspace {
                     state.undoneScanPlacementIDs.append(placement.id)
                     state.error = nil
                 case .undoLastFloorVariantButtonTapped:
-                    guard let variant = state.floorVariants.last(where: {
-                        !state.undoneFloorVariantIDs.contains($0.id)
-                    }) else { return }
+                    guard let variant = state.activeFloorVariant,
+                          let before = variant.before else { return }
+                    let ids = Set(variant.floorIDs)
+                    guard ids == Set(before.map(\.id)),
+                          ids.isSubset(of: Set(state.floors.map(\.id))) else { return }
+                    for index in state.floors.indices {
+                        if let snapshot = before.first(where: { $0.id == state.floors[index].id }) {
+                            state.floors[index] = snapshot.state
+                        }
+                    }
+                    state.selectedFloorIDs = variant.selectedFloorIDsBefore ?? before.map(\.id)
                     state.undoneFloorVariantIDs.append(variant.id)
                     state.error = nil
                 default:
@@ -480,6 +492,7 @@ public struct Workspace {
         case addRoomButtonTapped
         case appStarted
         case importFailed(String)
+        case createFloorVariantButtonTapped(UUID)
         case planFloorButtonTapped(UUID, UUID)
         case planSelectedFloorsButtonTapped(UUID)
         case proAccessChanged(Bool)
@@ -505,7 +518,7 @@ public struct Workspace {
                 case .scanRoomButtonTapped, .roomCaptureFinished, .structureCaptureFinished,
                      .addRoomButtonTapped, .importUsdz, .newProjectButtonTapped,
                      .joinSelectedButtonTapped, .splitSelectedButtonTapped,
-                     .planFloorButtonTapped, .planSelectedFloorsButtonTapped, .projects:
+                     .createFloorVariantButtonTapped, .planFloorButtonTapped, .planSelectedFloorsButtonTapped, .projects:
                     return
                 default: break
                 }
@@ -622,6 +635,7 @@ public struct Workspace {
                     state.projects = restored.projects
                     state.selectedProjectID = restored.selectedProjectID
                     state.freeRoomID = restored.freeRoomID
+                    state.refreshPlans()
                     state.storageError = nil
                     state.hasLoaded = true
                 } catch {
@@ -630,54 +644,36 @@ public struct Workspace {
             case .retrySaveButtonTapped:
                 guard state.hasLoaded else { return }
                 save(&state)
-            case .planFloorButtonTapped(let projectID, let floorID):
+            case .createFloorVariantButtonTapped(let projectID):
                 guard let p = state.projects.firstIndex(where: { $0.id == projectID }),
-                      let f = state.projects[p].floors.firstIndex(where: { $0.id == floorID }) else { return }
-                let floor = state.projects[p].floors[f]
-                guard state.hasPro || state.freeRoomID == nil || state.freeRoomID == floor.accessID else {
-                    state.isPaywallPresented = true
-                    return
-                }
+                      state.projects[p].activeFloorVariant == nil else { return }
                 do {
-                    let plan = try floor.makePlan()
-                    state.projects[p].floors[f].plan = plan
-                    state.projects[p].floors[f].error = nil
-                    if !state.hasPro && state.freeRoomID == nil { state.freeRoomID = floor.accessID }
-                } catch {
-                    state.projects[p].floors[f].plan = nil
-                    state.projects[p].floors[f].error = error.localizedDescription
-                }
-            case .planSelectedFloorsButtonTapped(let projectID):
-                guard let p = state.projects.firstIndex(where: { $0.id == projectID }) else { return }
-                let selected = state.projects[p].selectedFloorIDs
-                guard !selected.isEmpty else { return }
-                var plans: [(UUID, LayoutPlan)] = []
-                for floorID in selected {
-                    guard let floor = state.projects[p].floors.first(where: { $0.id == floorID }) else { continue }
-                    do {
-                        plans.append((floorID, try floor.makePlan()))
-                    } catch {
-                        state.projects[p].error = error.localizedDescription
+                    let floors = try state.projects[p].floorsForPlanning(state.projects[p].selectedFloorIDs)
+                    guard state.canPlan(floors) else {
+                        state.isPaywallPresented = true
                         return
                     }
+                    let plans = try floors.map { try $0.makePlan() }
+                    var variant = FloorVariant(
+                        id: uuid(), floorIDs: floors.map(\.id),
+                        areaNetMm2: plans.reduce(0) { $0 + $1.bom.areaNetMm2 },
+                        areaBoughtMm2: plans.reduce(0) { $0 + $1.bom.areaBoughtMm2 },
+                        fullBoards: plans.reduce(0) { $0 + $1.bom.fullBoards },
+                        pieces: plans.reduce(0) { $0 + $1.bom.pieces }, packs: nil
+                    )
+                    variant.before = floors.map(FloorSnapshot.init)
+                    variant.inputs = variant.before
+                    variant.selectedFloorIDsBefore = state.projects[p].selectedFloorIDs
+                    state.projects[p].floorVariants.append(variant)
+                    state.commitPlans(plans, floors: floors, projectIndex: p)
+                } catch {
+                    state.projects[p].error = error.localizedDescription
                 }
-                guard !plans.isEmpty else { return }
-                for (floorID, plan) in plans {
-                    guard let f = state.projects[p].floors.firstIndex(where: { $0.id == floorID }) else { continue }
-                    state.projects[p].floors[f].plan = plan
-                    state.projects[p].floors[f].error = nil
-                }
-                let packs = plans.compactMap { $0.1.bom.packs }
-                state.projects[p].floorVariants.append(FloorVariant(
-                    id: uuid(),
-                    floorIDs: plans.map(\.0),
-                    areaNetMm2: plans.reduce(0) { $0 + $1.1.bom.areaNetMm2 },
-                    areaBoughtMm2: plans.reduce(0) { $0 + $1.1.bom.areaBoughtMm2 },
-                    fullBoards: plans.reduce(0) { $0 + $1.1.bom.fullBoards },
-                    pieces: plans.reduce(0) { $0 + $1.1.bom.pieces },
-                    packs: packs.count == plans.count ? packs.reduce(0, +) : nil
-                ))
-                state.projects[p].error = nil
+            case .planFloorButtonTapped(let projectID, let floorID):
+                state.planFloors([floorID], projectID: projectID)
+            case .planSelectedFloorsButtonTapped(let projectID):
+                guard let project = state.projects.first(where: { $0.id == projectID }) else { return }
+                state.planFloors(project.selectedFloorIDs, projectID: projectID)
             case .proAccessChanged(let hasPro):
                 state.applyProAccess(hasPro)
             case .importFailed(let message):
@@ -760,7 +756,8 @@ public struct Workspace {
                     state.error = error.localizedDescription
                 }
             case .splitSelectedButtonTapped:
-                guard let index = state.selectedProjectIndex else { return }
+                guard let index = state.selectedProjectIndex,
+                      state.projects[index].activeFloorVariant == nil else { return }
                 let selectedIDs = state.projects[index].selectedFloorIDs
                 guard selectedIDs.count == 1,
                       let floorIndex = state.projects[index].floors.firstIndex(where: { $0.floorID == selectedIDs[0] })
@@ -801,6 +798,8 @@ public struct Workspace {
                     )
                     first.copyMaterial(from: original)
                     second.copyMaterial(from: original)
+                    first.storey = original.storey
+                    second.storey = original.storey
                     let correction = GeometryCorrection(
                         id: uuid(),
                         operation: .split(axis: state.projects[index].splitAxis, atMm: atMm),
@@ -815,7 +814,8 @@ public struct Workspace {
                     state.projects[index].error = error.localizedDescription
                 }
             case .joinSelectedButtonTapped:
-                guard let index = state.selectedProjectIndex else { return }
+                guard let index = state.selectedProjectIndex,
+                      state.projects[index].activeFloorVariant == nil else { return }
                 let selectedIDs = state.projects[index].selectedFloorIDs
                 let selected = state.projects[index].floors.filter { selectedIDs.contains($0.floorID) }
                 guard selected.count == 2 else { return }
@@ -834,6 +834,7 @@ public struct Workspace {
                         accessID: selected[0].accessID == selected[1].accessID ? selected[0].accessID : nil
                     )
                     item.copyMaterial(from: selected[0])
+                    item.storey = selected[0].storey == selected[1].storey ? selected[0].storey : nil
                     let correction = GeometryCorrection(
                         id: uuid(),
                         operation: .join,
@@ -864,6 +865,9 @@ public struct Workspace {
         .forEach(\.projects) {
             Project()
         }
+        .onChange(of: store.projects.map { $0.floors.map(WorkspaceArchive.FloorRecord.init) }) { state in
+            state.refreshPlans()
+        }
         .onChange(of: WorkspaceArchive(store.state)) { state in
             guard state.hasLoaded else { return }
             save(&state)
@@ -891,13 +895,7 @@ extension Workspace.State {
     mutating func applyProAccess(_ value: Bool) {
         hasPro = value
         if value { isPaywallPresented = false }
-        if !value {
-            for p in projects.indices {
-                for f in projects[p].floors.indices where projects[p].floors[f].accessID != freeRoomID {
-                    projects[p].floors[f].plan = nil
-                }
-            }
-        }
+        refreshPlans()
     }
 
     var selectedProjectIndex: Int? {
