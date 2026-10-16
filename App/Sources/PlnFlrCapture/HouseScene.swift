@@ -3,6 +3,9 @@ import ModelIO
 import SceneKit
 import SceneKit.ModelIO
 import simd
+#if os(iOS)
+import RoomPlan
+#endif
 
 public struct ScenePoint: Codable, Equatable, Sendable {
     public var xMm: Int
@@ -115,21 +118,117 @@ public enum HouseScene {
         return .hits(hits)
     }
 
+    enum PreviewError: LocalizedError {
+        case unreadable
+        case roomPlanUnavailable
+        case missingSource
+
+        var errorDescription: String? {
+            switch self {
+            case .unreadable: "Nie udało się odczytać geometrii źródła."
+            case .roomPlanUnavailable: "Podgląd RoomPlan wymaga iPhone’a lub iPada z API Apple."
+            case .missingSource: "Brak zachowanego źródła 3D."
+            }
+        }
+    }
+
+    static func previewURL(_ scan: Workspace.Scan.State) throws -> URL {
+        if let bytes = scan.sourceUsdz {
+            let suffix = bytes.starts(with: [0x50, 0x4b]) ? "usdz" : "usd"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(suffix)")
+            do {
+                try bytes.write(to: url, options: .atomic)
+                return url
+            } catch {
+                try? FileManager.default.removeItem(at: url)
+                throw error
+            }
+        }
+        #if os(iOS)
+        if let source = scan.roomPlanStructure {
+            return try RoomPlanStructurePreview.exportURL(source)
+        }
+        if let bytes = scan.roomPlanJSON {
+            let room = try JSONDecoder().decode(RoomPlan.CapturedRoom.self, from: bytes)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).usdz")
+            do {
+                try room.export(to: url, exportOptions: .mesh)
+                return url
+            } catch {
+                try? FileManager.default.removeItem(at: url)
+                throw error
+            }
+        }
+        #else
+        if scan.roomPlanStructure != nil || scan.roomPlanJSON != nil {
+            throw PreviewError.roomPlanUnavailable
+        }
+        #endif
+        throw PreviewError.missingSource
+    }
+
+    private static func mesh(url: URL, transform: ScanTransform) throws -> SCNNode {
+        let asset = MDLAsset(url: url)
+        let node = SCNNode()
+        node.name = "scan.mesh"
+        for index in 0..<asset.count {
+            node.addChildNode(SCNNode(mdlObject: asset.object(at: index)))
+        }
+        var hasGeometry = false
+        node.enumerateChildNodes { child, _ in
+            if let geometry = child.geometry, geometry.sources(for: .vertex).contains(where: { $0.vectorCount > 0 }) {
+                hasGeometry = true
+            }
+        }
+        guard hasGeometry else { throw PreviewError.unreadable }
+        node.position = SCNVector3(CGFloat(transform.xMm) / 1000, CGFloat(transform.zMm) / 1000, CGFloat(transform.yMm) / 1000)
+        node.eulerAngles.y = CGFloat(transform.yawDegrees % 360) * .pi / 180
+        return node
+    }
+
     public static func mesh(bytes: Data, transform: ScanTransform) -> SCNNode? {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".usd")
         do {
-            try bytes.write(to: url)
+            let scan = Workspace.Scan.State(id: UUID(), label: "", rooms: [], sourceUsdz: bytes)
+            let url = try previewURL(scan)
             defer { try? FileManager.default.removeItem(at: url) }
-            let asset = MDLAsset(url: url)
-            guard asset.count > 0 else { return nil }
-            let node = SCNNode(mdlObject: asset.object(at: 0))
-            node.name = "scan.mesh"
-            node.position = SCNVector3(CGFloat(transform.xMm) / 1000, CGFloat(transform.zMm) / 1000, CGFloat(transform.yMm) / 1000)
-            node.eulerAngles.y = CGFloat(transform.yawDegrees) * .pi / 180
-            return node
+            return try mesh(url: url, transform: transform)
         } catch {
             return nil
         }
+    }
+
+    static func scans(_ scans: [Workspace.Scan.State]) -> (scene: SCNScene, errors: [String]) {
+        let scene = SCNScene()
+        var errors: [String] = []
+        for scan in scans {
+            do {
+                let url = try previewURL(scan)
+                defer { try? FileManager.default.removeItem(at: url) }
+                let node = try mesh(url: url, transform: scan.transform)
+                node.name = "scan.\(scan.id.uuidString)"
+                scene.rootNode.addChildNode(node)
+            } catch {
+                errors.append("\(scan.label): \(error.localizedDescription)")
+            }
+        }
+        if !scene.rootNode.childNodes.isEmpty {
+            let bounds = scene.rootNode.boundingBox
+            let minimum = SIMD3<Double>(Double(bounds.min.x), Double(bounds.min.y), Double(bounds.min.z))
+            let maximum = SIMD3<Double>(Double(bounds.max.x), Double(bounds.max.y), Double(bounds.max.z))
+            let center = (minimum + maximum) / 2
+            let radius = max(simd_length(maximum - minimum) / 2, 0.1)
+            let distance = radius / sin(Double.pi / 8) * 1.2
+            let camera = SCNNode()
+            camera.name = "scans.camera"
+            camera.camera = SCNCamera()
+            camera.camera?.fieldOfView = 45
+            camera.camera?.zNear = max(radius / 1000, 0.001)
+            camera.camera?.zFar = distance + radius * 4
+            camera.position = SCNVector3(center.x, center.y + distance / sqrt(2), center.z + distance / sqrt(2))
+            camera.look(at: SCNVector3(center.x, center.y, center.z))
+            scene.rootNode.addChildNode(camera)
+        }
+        return (scene, errors)
     }
 
     public static func scene(walls: [WallSegment], routes: [UtilityRoute], furniture: [FurnitureItem]) -> SCNScene {

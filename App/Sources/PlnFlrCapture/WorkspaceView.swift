@@ -1,6 +1,7 @@
 import ComposableArchitecture2
 import Foundation
 import PlnFlrLayout
+import SceneKit
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(iOS)
@@ -108,6 +109,7 @@ public struct WorkspaceView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
                     if !project.scans.isEmpty {
+                        ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
                     }
                     if project.floors.isEmpty {
@@ -180,36 +182,82 @@ private struct ProjectHeaderView: View {
     }
 }
 
+private struct ScanSceneView: View {
+    let scans: [Workspace.Scan.State]
+    @State private var scene: SCNScene?
+    @State private var errors: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Wspólna mapa skanów 3D").font(.headline)
+            if let scene {
+                SceneView(scene: scene, pointOfView: scene.rootNode.childNode(withName: "scans.camera", recursively: false),
+                          options: [.allowsCameraControl, .autoenablesDefaultLighting], preferredFramesPerSecond: 30)
+                    .frame(height: 360)
+                    .accessibilityLabel("Wspólna mapa skanów. Źródła: \(scans.count)")
+                    .accessibilityIdentifier("scanScenePreview")
+            }
+            ForEach(Array(errors.enumerated()), id: \.offset) { _, message in
+                Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+            Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
+                .font(.caption).foregroundStyle(.secondary)
+            Text("Ustawienie zmienia tylko podgląd źródła. Podłogi i obliczenia pozostają bez zmian.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .onChange(of: scans, initial: true) { _, value in
+            let preview = HouseScene.scans(value)
+            scene = preview.scene
+            errors = preview.errors
+        }
+    }
+}
+
 private struct RoomPlanSourceListView: View {
     let scans: [Workspace.Scan.State]
     @State private var previewURL: URL?
     @State private var previewError: String?
+    @State private var selectedScan: Workspace.Scan.State?
 
-    private var listed: [Workspace.Scan.State] {
-        scans.filter { $0.roomPlanStructure != nil || $0.sourceUsdz != nil }
-    }
+    private var listed: [Workspace.Scan.State] { scans }
 
     var body: some View {
-        #if os(iOS)
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(listed, id: \.id) { scan in
-                sourceCard(scan)
+        Group {
+            #if os(iOS)
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(listed, id: \.id) { scan in
+                    sourceCard(scan)
+                }
             }
-        }
-        .quickLookPreview($previewURL)
-        .accessibilityIdentifier("roomPlan3DSourceList")
-        #else
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(listed, id: \.id) { scan in
-                sourceCard(scan, interactive: false)
+            .quickLookPreview($previewURL)
+            .accessibilityIdentifier("roomPlan3DSourceList")
+            #else
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(listed, id: \.id) { scan in
+                    sourceCard(scan)
+                }
             }
+            .accessibilityIdentifier("roomPlan3DSourceList")
+            .sheet(item: $selectedScan) { scan in
+                VStack {
+                    ScanSceneView(scans: [scan])
+                    Button("Zamknij") { selectedScan = nil }
+                }
+                .padding()
+                .frame(minWidth: 480, minHeight: 440)
+            }
+            #endif
         }
-        .accessibilityIdentifier("roomPlan3DSourceList")
-        #endif
+        .onChange(of: previewURL) { oldURL, _ in
+            if let oldURL { try? FileManager.default.removeItem(at: oldURL) }
+        }
+        .onDisappear {
+            if let previewURL { try? FileManager.default.removeItem(at: previewURL) }
+        }
     }
 
     @ViewBuilder
-    private func sourceCard(_ scan: Workspace.Scan.State, interactive: Bool = true) -> some View {
+    private func sourceCard(_ scan: Workspace.Scan.State) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title(scan), systemImage: "view.3d")
                 .font(.headline)
@@ -217,24 +265,22 @@ private struct RoomPlanSourceListView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             #if os(iOS)
-            if interactive, let source = scan.roomPlanStructure {
-                Button("Otwórz podgląd 3D") {
-                    do {
-                        previewError = nil
-                        previewURL = try RoomPlanStructurePreview.exportURL(source)
-                    } catch {
-                        previewError = "Nie udało się przygotować podglądu: \(error.localizedDescription)"
-                    }
+            Button("Otwórz podgląd 3D") {
+                do {
+                    previewError = nil
+                    previewURL = try HouseScene.previewURL(scan)
+                } catch {
+                    previewError = "\(scan.label): \(error.localizedDescription)"
                 }
+            }
+            #else
+            if scan.sourceUsdz != nil {
+                Button("Otwórz podgląd 3D") { selectedScan = scan }
             } else {
                 Text(limit(scan))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            #else
-            Text(limit(scan))
-                .font(.caption)
-                .foregroundStyle(.secondary)
             #endif
             if let previewError {
                 Label(previewError, systemImage: "exclamationmark.triangle")
@@ -257,10 +303,10 @@ private struct RoomPlanSourceListView: View {
     }
 
     private func limit(_ scan: Workspace.Scan.State) -> String {
-        if scan.roomPlanStructure != nil {
+        if scan.roomPlanStructure != nil || scan.roomPlanJSON != nil {
             return "Podgląd 3D skanu RoomPlan jest dostępny w aplikacji na iPhone’a lub iPada."
         }
-        return "Zachowano oryginalny plik USDZ. Interaktywny podgląd meshu nie jest jeszcze dostępny na tym urządzeniu."
+        return "Brak zachowanego źródła 3D."
     }
 }
 
@@ -298,6 +344,7 @@ private struct ScanRowView: View {
     @State private var yMm = "0"
     @State private var zMm = "0"
     @State private var yawDegrees = "0"
+    @State private var placementError: String?
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -318,10 +365,26 @@ private struct ScanRowView: View {
             TextField("Y (mm)", text: $yMm)
             TextField("Z (mm)", text: $zMm)
             TextField("Obrót (°)", text: $yawDegrees)
+            Text("Pochodzenie ustawienia: \(ScanPlacement.Provenance.manualCorrection.label)")
+                .font(.caption).foregroundStyle(.secondary)
             Button("Ustaw skan") {
-                guard let x = Int(xMm), let y = Int(yMm), let z = Int(zMm), let yaw = Int(yawDegrees) else { return }
+                guard let x = Int(xMm), let y = Int(yMm), let z = Int(zMm), let yaw = Int(yawDegrees) else {
+                    placementError = "Wpisz liczby całkowite: X, Y, Z w milimetrach, obrót w stopniach."
+                    return
+                }
+                placementError = nil
                 store.send(.setManualPlacementButtonTapped(ScanTransform(xMm: x, yMm: y, zMm: z, yawDegrees: yaw)))
             }
+            if let placementError {
+                Label(placementError, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+        }
+        .onChange(of: store.transform, initial: true) { _, transform in
+            xMm = String(transform.xMm)
+            yMm = String(transform.yMm)
+            zMm = String(transform.zMm)
+            yawDegrees = String(transform.yawDegrees)
+            placementError = nil
         }
     }
 }

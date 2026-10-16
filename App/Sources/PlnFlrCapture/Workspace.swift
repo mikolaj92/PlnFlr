@@ -122,15 +122,36 @@ public struct FloorVariant: Codable, Equatable, Sendable, Identifiable {
 /// Append-only record of a manual scan placement; the previous transform remains available for undo.
 public struct ScanPlacement: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
+    public enum Provenance: String, Codable, Sendable {
+        case manualCorrection
+
+        public var label: String { "Ręczna korekta" }
+    }
+
     public let scanID: UUID
     public let before: ScanTransform
     public let after: ScanTransform
+    public let provenance: Provenance
 
-    public init(id: UUID, scanID: UUID, before: ScanTransform, after: ScanTransform) {
+    public init(id: UUID, scanID: UUID, before: ScanTransform, after: ScanTransform, provenance: Provenance = .manualCorrection) {
         self.id = id
         self.scanID = scanID
         self.before = before
         self.after = after
+        self.provenance = provenance
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, scanID, before, after, provenance
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        scanID = try values.decode(UUID.self, forKey: .scanID)
+        before = try values.decode(ScanTransform.self, forKey: .before)
+        after = try values.decode(ScanTransform.self, forKey: .after)
+        provenance = try values.decodeIfPresent(Provenance.self, forKey: .provenance) ?? .manualCorrection
     }
 }
 
