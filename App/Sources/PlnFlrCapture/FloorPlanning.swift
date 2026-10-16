@@ -20,7 +20,6 @@ public enum FloorFinish: String, Codable, Equatable, Sendable {
 
 extension Workspace.Floor.State {
     mutating func copyMaterial(from other: Self) {
-        storey = other.storey
         material = other.material
         packSize = other.packSize
         groutMm = other.groutMm
