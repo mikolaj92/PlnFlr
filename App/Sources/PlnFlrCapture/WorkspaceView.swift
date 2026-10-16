@@ -106,6 +106,8 @@ public struct WorkspaceView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
                     UtilitiesView(store: projectStore)
+                    DrillCheckView(routes: project.utilities)
+                        .id(project.projectID)
                     if !project.scans.isEmpty {
                         ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
@@ -232,6 +234,90 @@ private struct UtilitiesView: View {
         }
         .sheet(item: $draft) { value in
             UtilityRouteEditor(store: store, draft: value)
+        }
+    }
+}
+
+private struct DrillCheckView: View {
+    var routes: [UtilityRoute]
+    @State private var x = "0"
+    @State private var y = "0"
+    @State private var z = "0"
+    @State private var dx = "0"
+    @State private var dy = "1"
+    @State private var dz = "0"
+    @State private var depth = "100"
+    @State private var diameter = "6"
+    @State private var submitted = false
+
+    private var answer: DrillAnswer {
+        guard let x = Int(x), let y = Int(y), let z = Int(z),
+              let dx = Int(dx), let dy = Int(dy), let dz = Int(dz),
+              let depth = Int(depth), let diameter = Int(diameter) else { return .invalidQuery }
+        return HouseScene.drill(DrillQuery(
+            origin: ScenePoint(xMm: x, yMm: y, zMm: z),
+            direction: ScenePoint(xMm: dx, yMm: dy, zMm: dz),
+            depthMm: depth, diameterMm: diameter), routes: routes)
+    }
+
+    var body: some View {
+        DisclosureGroup("Sprawdź otwór względem zapisanych instalacji") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Współrzędne w układzie projektu, w całych milimetrach. Kierunek określa wektor, nie punkt końcowy.")
+                field("Punkt wejścia X (mm)", text: $x)
+                field("Punkt wejścia Y (mm)", text: $y)
+                field("Punkt wejścia Z (mm)", text: $z)
+                field("Kierunek X", text: $dx)
+                field("Kierunek Y", text: $dy)
+                field("Kierunek Z", text: $dz)
+                field("Głębokość otworu (mm)", text: $depth)
+                field("Średnica otworu (mm)", text: $diameter)
+                Button("Sprawdź zapisane trasy") { submitted = true }
+                if submitted {
+                    switch answer {
+                    case .unknown:
+                        Text("Brak zapisanych tras. Przebieg instalacji jest nieznany.")
+                    case .invalidQuery:
+                        Text("Wprowadź całkowite współrzędne, niezerowy kierunek oraz dodatnią głębokość i średnicę.")
+                    case .incomplete(let hits):
+                        Text("Niektóre trasy mają błędną lub niekompletną geometrię. Wynik jest niepełny.")
+                        hitList(hits)
+                    case .hits(let hits):
+                        if hits.isEmpty {
+                            Text("Brak przecięć zapisanych tras. Nie oznacza to braku instalacji.")
+                        } else {
+                            hitList(hits)
+                        }
+                    }
+                }
+                Text("Otwór jest skończonym walcem. Trasy uwzględniają własny promień, także przy końcach odcinków. Styczność jest trafieniem. Tolerancja: 0,1 mm.")
+                    .font(.caption)
+                Text("Dane mogą być niepełne. Żaden wynik nie potwierdza bezpieczeństwa wiercenia. Zapytanie nie jest zapisywane ani eksportowane.")
+                    .font(.caption)
+            }
+        }
+    }
+
+    private func field(_ title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading) {
+            Text(title)
+            TextField(title, text: text)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(title)
+        }
+    }
+
+    private func hitList(_ hits: [DrillHit]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(hits, id: \.routeID) { hit in
+                VStack(alignment: .leading) {
+                    Text(hit.name).font(.headline)
+                    Text(hit.confidence == .confirmed && hit.state == .existing
+                         ? "Przecięcie potwierdzonej trasy w zapisanej geometrii."
+                         : "Możliwe przecięcie trasy niepewnej lub planowanej.")
+                    Text("Źródło: \(hit.source.label) · Pewność: \(hit.confidence.label) · Stan: \(hit.state.label)")
+                }
+            }
         }
     }
 }
