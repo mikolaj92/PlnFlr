@@ -112,6 +112,10 @@ public struct WorkspaceView: View {
                         .id(project.projectID)
                     if !project.scans.isEmpty {
                         RoomPlanSourceListView(scans: project.scans)
+                        if project.scans.count >= 2 {
+                            Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         ModelPartsView(store: projectStore)
                     }
                     if project.floors.isEmpty {
@@ -584,7 +588,7 @@ private struct ScanSceneView: View {
 
     private func refreshScene() {
         let preview = HouseScene.scans(scans, selection: selection)
-        scene = preview.scene
+        scene = preview.scene.rootNode.childNode(withName: "scans.camera", recursively: false) == nil ? nil : preview.scene
         errors = preview.errors
         #if os(iOS)
         wallColor = "existing"
@@ -704,29 +708,24 @@ private struct RoomPlanSourceListView: View {
     private var listed: [Workspace.Scan.State] { scans }
 
     var body: some View {
-        Group {
-            #if os(iOS)
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(listed, id: \.id) { scan in
-                    sourceCard(scan)
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(listed, id: \.id) { scan in
+                sourceCard(scan)
             }
-            .accessibilityIdentifier("roomPlan3DSourceList")
-            #else
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(listed, id: \.id) { scan in
-                    sourceCard(scan)
+        }
+        .accessibilityIdentifier("roomPlan3DSourceList")
+        .sheet(item: $selectedScan) { scan in
+            VStack {
+                if let current = scans.first(where: { $0.id == scan.id }) {
+                    ScanSceneView(scans: [current], title: "USDZ · \(current.label)")
+                } else {
+                    Label("\(scan.label): brak zachowanego źródła 3D.", systemImage: "exclamationmark.triangle")
                 }
+                Button("Zamknij") { selectedScan = nil }
             }
-            .accessibilityIdentifier("roomPlan3DSourceList")
-            .sheet(item: $selectedScan) { scan in
-                VStack {
-                    ScanSceneView(scans: [scan])
-                    Button("Zamknij") { selectedScan = nil }
-                }
-                .padding()
-                .frame(minWidth: 480, minHeight: 440)
-            }
+            .padding()
+            #if os(macOS)
+            .frame(minWidth: 480, minHeight: 440)
             #endif
         }
     }
@@ -736,20 +735,23 @@ private struct RoomPlanSourceListView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title(scan), systemImage: "view.3d")
                 .font(.headline)
-            #if os(iOS)
-            ScanSceneView(scans: [scan], title: "Źródłowy model 3D", allowsWallAppearance: true)
-            #else
-            Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
-                .font(.caption)
-                .foregroundStyle(.secondary)
             if scan.sourceUsdz != nil {
+                Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button("Otwórz podgląd 3D") { selectedScan = scan }
             } else {
+                #if os(iOS)
+                ScanSceneView(scans: [scan], title: "Źródłowy model 3D", allowsWallAppearance: true)
+                #else
+                Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(limit(scan))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                #endif
             }
-            #endif
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -789,6 +791,8 @@ private struct ProjectRoomsView: View {
             }
             if !store.scans.isEmpty {
                 Section("Skany źródłowe") {
+                    Text("Skany z osobnych sesji nie są dopasowywane automatycznie. Ustaw ich położenie ręcznie.")
+                        .font(.caption).foregroundStyle(.secondary)
                     ForEach(store.scope(\.scans)) { scan in ScanRowView(store: scan) }
                     if store.scanPlacements.contains(where: { !store.undoneScanPlacementIDs.contains($0.id) }) {
                         Button("Cofnij ostatnie ustawienie skanu") {
@@ -822,7 +826,7 @@ private struct ScanRowView: View {
                 Text(store.roomPlanJSON == nil ? "Powierzchnie: \(store.rooms.count)" : "Pełny skan RoomPlan zapisany")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("Ustawienie: X \(store.transform.xMm) mm, Y \(store.transform.yMm) mm, Z \(store.transform.zMm) mm, obrót \(store.transform.yawDegrees)°")
+            Text("Ręczne ustawienie: X \(store.transform.xMm) mm, Y \(store.transform.yMm) mm, Z \(store.transform.zMm) mm, obrót \(store.transform.yawDegrees)°")
                 .font(.caption).foregroundStyle(.secondary)
             TextField("X (mm)", text: $xMm)
             TextField("Y (mm)", text: $yMm)
@@ -830,7 +834,7 @@ private struct ScanRowView: View {
             TextField("Obrót (°)", text: $yawDegrees)
             Text("Pochodzenie ustawienia: \(ScanPlacement.Provenance.manualCorrection.label)")
                 .font(.caption).foregroundStyle(.secondary)
-            Button("Ustaw skan") {
+            Button("Zapisz ręczne ustawienie") {
                 guard let x = Int(xMm), let y = Int(yMm), let z = Int(zMm), let yaw = Int(yawDegrees) else {
                     placementError = "Wpisz liczby całkowite: X, Y, Z w milimetrach, obrót w stopniach."
                     return

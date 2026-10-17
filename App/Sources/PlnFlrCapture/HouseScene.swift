@@ -231,7 +231,7 @@ public enum HouseScene {
 
         var errorDescription: String? {
             switch self {
-            case .unreadable: "Nie udało się odczytać geometrii źródła."
+            case .unreadable: "Nie udało się odczytać źródła lub plik nie zawiera meshu do wyświetlenia."
             case .roomPlanUnavailable: "Podgląd RoomPlan wymaga iPhone’a lub iPada z API Apple."
             case .missingSource: "Brak zachowanego źródła 3D."
             case .emptySelection: "Wybierz co najmniej jeden element modelu."
@@ -284,11 +284,23 @@ public enum HouseScene {
         }
         var hasGeometry = false
         node.enumerateChildNodes { child, _ in
-            if let geometry = child.geometry, geometry.sources(for: .vertex).contains(where: { $0.vectorCount > 0 }) {
+            if !child.isHidden, let geometry = child.geometry,
+               geometry.sources(for: .vertex).contains(where: { $0.vectorCount > 0 }),
+               geometry.elements.contains(where: { $0.primitiveCount > 0 }) {
+                var ancestor = child.parent
+                while let parent = ancestor, parent !== node {
+                    if parent.isHidden { return }
+                    ancestor = parent.parent
+                }
                 hasGeometry = true
             }
         }
-        guard hasGeometry else { throw PreviewError.unreadable }
+        let bounds = node.boundingBox
+        let coordinates = [bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z]
+        guard hasGeometry, coordinates.allSatisfy({ $0.isFinite }),
+              bounds.max.x > bounds.min.x || bounds.max.y > bounds.min.y || bounds.max.z > bounds.min.z else {
+            throw PreviewError.unreadable
+        }
         node.position = SCNVector3(CGFloat(transform.xMm) / 1000, CGFloat(transform.zMm) / 1000, CGFloat(transform.yMm) / 1000)
         node.eulerAngles = SCNVector3(0, Double(transform.yawDegrees % 360) * .pi / 180, 0)
         return node
