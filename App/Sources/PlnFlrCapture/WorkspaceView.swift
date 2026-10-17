@@ -111,6 +111,10 @@ public struct WorkspaceView: View {
                     if !project.scans.isEmpty {
                         ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
+                        if project.scans.count >= 2 {
+                            Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         ModelPartsView(store: projectStore)
                     }
                     if project.floors.isEmpty {
