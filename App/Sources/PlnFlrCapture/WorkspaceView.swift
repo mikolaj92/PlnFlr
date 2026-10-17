@@ -464,7 +464,7 @@ private struct ScanSceneView: View {
 
     private func refreshScene() {
         let preview = HouseScene.scans(scans, selection: selection)
-        scene = preview.scene
+        scene = preview.scene.rootNode.childNode(withName: "scans.camera", recursively: false) == nil ? nil : preview.scene
         errors = preview.errors
         #if os(iOS)
         wallColor = "existing"
@@ -584,29 +584,24 @@ private struct RoomPlanSourceListView: View {
     private var listed: [Workspace.Scan.State] { scans }
 
     var body: some View {
-        Group {
-            #if os(iOS)
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(listed, id: \.id) { scan in
-                    sourceCard(scan)
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(listed, id: \.id) { scan in
+                sourceCard(scan)
             }
-            .accessibilityIdentifier("roomPlan3DSourceList")
-            #else
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(listed, id: \.id) { scan in
-                    sourceCard(scan)
+        }
+        .accessibilityIdentifier("roomPlan3DSourceList")
+        .sheet(item: $selectedScan) { scan in
+            VStack {
+                if let current = scans.first(where: { $0.id == scan.id }) {
+                    ScanSceneView(scans: [current], title: "USDZ · \(current.label)")
+                } else {
+                    Label("\(scan.label): brak zachowanego źródła 3D.", systemImage: "exclamationmark.triangle")
                 }
+                Button("Zamknij") { selectedScan = nil }
             }
-            .accessibilityIdentifier("roomPlan3DSourceList")
-            .sheet(item: $selectedScan) { scan in
-                VStack {
-                    ScanSceneView(scans: [scan])
-                    Button("Zamknij") { selectedScan = nil }
-                }
-                .padding()
-                .frame(minWidth: 480, minHeight: 440)
-            }
+            .padding()
+            #if os(macOS)
+            .frame(minWidth: 480, minHeight: 440)
             #endif
         }
     }
@@ -616,20 +611,23 @@ private struct RoomPlanSourceListView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title(scan), systemImage: "view.3d")
                 .font(.headline)
-            #if os(iOS)
-            ScanSceneView(scans: [scan], title: "Źródłowy model 3D", allowsWallAppearance: true)
-            #else
-            Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
-                .font(.caption)
-                .foregroundStyle(.secondary)
             if scan.sourceUsdz != nil {
+                Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button("Otwórz podgląd 3D") { selectedScan = scan }
             } else {
+                #if os(iOS)
+                ScanSceneView(scans: [scan], title: "Źródłowy model 3D", allowsWallAppearance: true)
+                #else
+                Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(limit(scan))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                #endif
             }
-            #endif
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
