@@ -1,12 +1,10 @@
 # PlnFlr — praca lokalna
 
-Kompas produktu i granica bezpieczeństwa instalacji są w [SOUL.md](../SOUL.md): jeden wierny model 3D domu, praca na zakresie pokój/kondygnacja/dom i jawne źródła danych o tym, co ukryte.
-
 Bez kont PlnFlr, bez backendu kont, bez TestFlight. Projekty zapisują się na urządzeniu. Uprawnienie Pro pochodzi wyłącznie ze zweryfikowanych transakcji StoreKit 2, nigdy z JSON projektu.
 
-## Cel i obecny zakres
+## Obecny zakres
 
-PlnFlr ma być mapą domu budowaną razem z użytkownikiem, nie tylko kalkulatorem podłóg. Kolejność rozwoju: **skany całego domu i poszczególnych pomieszczeń → podłogi → instalacje wodne, kanalizacyjne, elektryczne, powietrzne, wentylacyjne i inne → ewentualnie meblowanie domu**. Wszystko na tej samej, stopniowo uzupełnianej mapie. Bieżącym priorytetem są skany; meblowanie pozostaje pomysłem na później. Kierunek produktu jest zapisany w [głównym README](../README.md#kierunek-produktu).
+Mapa 3D pokazuje skany, obrysy podłóg, ściany, instalacje i meble. Edytor mebli zapisuje całkowite milimetry, obrót w stopniach, źródło i widoczność. Starsze rekordy zachowują nieznane źródło i brak przypisania. Zakresy korzystają z podłóg i etykiet kondygnacji, nie z relacji bazowego skanu; skany, ściany i instalacje są widoczne tylko w zakresie domu.
 
 Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Na iOS jest także „Skanuj pomieszczenia”: interfejs Apple RoomPlan, zgoda na aparat, zakończenie pokoju, podgląd i opcja „Kolejny pokój”. Między pokojami używamy tej samej sesji AR (`stop(pauseARSession: false)`); Apple `StructureBuilder` składa pokoje przed zapisem. Projekt zachowuje pełne JSON-y oryginalnych `CapturedRoom` oraz wynikowy `CapturedStructure`. Błąd składania pozwala ponowić zapis bez utraty pokoi w bieżącej sesji. Anulowanie odrzuca niezapisany przebieg. Wymaga urządzenia obsługującego RoomPlan/LiDAR. Na Macu pozostaje import USDZ.
 
@@ -44,7 +42,7 @@ Lokalny limit to 20 000 oszacowanych elementów na plan; bardzo duże siatki są
 
 ## Dane i błędy zapisu
 
-`Application Support/PlnFlr/workspace.json` (w kontenerze aplikacji dla sandboxowanej `.app`; SPM używa zwykłego katalogu użytkownika). Zapis atomowy po zmianach danych projektu, także przez bindings. Błąd zapisu jest widoczny z opcją ponowienia. Nieczytelny/nieobsługiwany plik blokuje zapis, aby nie nadpisać go pustym projektem. Nie ma automatycznego kasowania ani resetu danych. W tej wersji nie ma iCloud ani eksportu/odzyskiwania kopii z UI. Plik nie jest zaszyfrowany.
+`Application Support/PlnFlr/workspace.json` (w kontenerze aplikacji dla sandboxowanej `.app`; SPM używa zwykłego katalogu użytkownika). Zapis atomowy po zmianach danych projektu, także przez bindings. Błąd zapisu jest widoczny z opcją ponowienia. Nieczytelny/nieobsługiwany plik blokuje zapis, aby nie nadpisać go pustym projektem. Nie ma automatycznego kasowania ani resetu danych. W tej wersji nie ma iCloud ani eksportu/odzyskiwania kopii z UI. Plik nie jest zaszyfrowany. Archiwum obejmuje historię cofania mebli, oddzielną od zmian podłóg i skanów; brak historii w starszym pliku oznacza pustą historię.
 
 Darmowy pokój jest lokalnym stanem produktu, nie odpornym na reinstalację licznikiem. Bez własnego konta/serwera nie obiecujemy limitu „raz na osobę”. Zakup Pro można odzyskać przez App Store; nie odzyskuje to samych lokalnych projektów.
 

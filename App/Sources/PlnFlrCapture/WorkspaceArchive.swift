@@ -38,6 +38,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var walls: [WallSegment]
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
+        var furnitureHistory: [[FurnitureItem]]
         var parts: [ModelPart]
 
         init(_ state: Workspace.Project.State) {
@@ -57,11 +58,12 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = state.walls
             utilities = state.utilities
             furniture = state.furniture
+            furnitureHistory = state.furnitureHistory
             parts = state.parts
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, furnitureHistory, parts
         }
 
         public init(from decoder: Decoder) throws {
@@ -82,17 +84,20 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = try container.decodeIfPresent([WallSegment].self, forKey: .walls) ?? []
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
+            furnitureHistory = try container.decodeIfPresent([[FurnitureItem]].self, forKey: .furnitureHistory) ?? []
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
         }
 
         var state: Workspace.Project.State {
-            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) },
+            var state = Workspace.Project.State(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) },
                   floors: floors.map(\.state), selectedFloorIDs: selectedFloorIDs,
                   splitAtM: splitAtM, splitAxis: splitAxis, geometryCorrections: geometryCorrections,
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
                   walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+            state.furnitureHistory = furnitureHistory
+            return state
         }
     }
 
@@ -206,8 +211,11 @@ public struct WorkspaceStorage: Sendable {
                   project.furniture.allSatisfy({ item in
                       item.roomID == nil || project.floors.contains(where: { $0.id == item.roomID })
                   }) else { throw FurnitureInputError.invalid }
-            for item in project.furniture {
-                try item.validate()
+            for snapshot in [project.furniture] + project.furnitureHistory {
+                guard Set(snapshot.map(\.id)).count == snapshot.count else { throw FurnitureInputError.invalid }
+                for item in snapshot {
+                    try item.validate()
+                }
             }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }

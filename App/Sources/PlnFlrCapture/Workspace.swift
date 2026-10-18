@@ -275,7 +275,8 @@ public struct FurnitureDraft: Identifiable, Equatable, Sendable {
 
     public func validatedItem(id: UUID, roomIDs: Set<UUID>) throws -> FurnitureItem {
         let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty, let roomID, roomIDs.contains(roomID),
+        guard !label.isEmpty,
+              roomID.map(roomIDs.contains) ?? (itemID != nil),
               let width = Int(width), width > 0,
               let depth = Int(depth), depth > 0,
               let height = Int(height), height > 0,
@@ -528,6 +529,9 @@ public struct Workspace {
                             throw FurnitureInputError.invalid
                         }
                         let item = try draft.validatedItem(id: draft.itemID ?? uuid(), roomIDs: Set(state.floors.map(\.id)))
+                        guard draft.itemID != nil || !state.furniture.contains(where: { $0.id == item.id }) else {
+                            throw FurnitureInputError.invalid
+                        }
                         var next = state.furniture
                         if let index = next.firstIndex(where: { $0.id == item.id }) {
                             next[index] = item
