@@ -273,7 +273,6 @@ private func unique(_ ids: [UUID]) throws {
 
 extension WorkspaceArchive.ProjectRecord {
     mutating func migrateRooms() {
-        // Only geometry corrections establish continuity; access IDs and labels do not.
         var identities: [UUID: UUID] = [:]
         let snapshots = geometryCorrections.flatMap { $0.before + $0.after }
             + floorVariants.flatMap { ($0.before ?? []) + ($0.inputs ?? []) }

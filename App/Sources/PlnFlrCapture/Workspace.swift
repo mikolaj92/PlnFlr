@@ -2,7 +2,6 @@ import ComposableArchitecture2
 import Foundation
 import PlnFlrLayout
 
-/// Identity and optional storey assignment, independent of layout geometry and paid access.
 public struct WorkspaceRoom: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var storeyID: UUID?
@@ -19,7 +18,6 @@ public struct WorkspaceRoom: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// Elevation in the shared house coordinates; assignment never moves a scan.
 public struct WorkspaceStorey: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var elevationMm: Int
