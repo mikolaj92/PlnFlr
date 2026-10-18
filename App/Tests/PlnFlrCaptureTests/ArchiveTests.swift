@@ -8,7 +8,7 @@ import Testing
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let storage = WorkspaceStorage(url: directory.appendingPathComponent("workspace.json"))
-    let sourceUsdz = twoFloorUsdz()
+    let sourceUsdz = try twoFloorUsdz()
     let captured = try roomFromUsdz(sourceUsdz)
     let scan = Workspace.Scan.State(
         id: UUID(),
@@ -53,7 +53,7 @@ import Testing
     let captured = try roomFromUsdz(twoFloorUsdz())
     let floor = Workspace.Floor.State(id: UUID(), name: "Salon", room: captured.rooms[0].room,
                                      thresholds: captured.rooms[0].thresholds, windows: captured.rooms[0].windows)
-    let sourceUsdz = twoFloorUsdz()
+    let sourceUsdz = try twoFloorUsdz()
     let project = Workspace.Project.State(id: UUID(), name: "Dom", scans: [
         .init(id: UUID(), label: "Parter", rooms: captured.rooms, sourceUsdz: sourceUsdz)
     ], floors: [floor], selectedFloorIDs: [floor.id])

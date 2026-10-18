@@ -23,7 +23,7 @@ import Testing
     let scanID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
     let salonID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
     let bedID = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
-    let sourceUsdz = twoFloorUsdz()
+    let sourceUsdz = try twoFloorUsdz()
     let store = await TestStoreActor(initialState: Workspace.State()) {
         Workspace()
     }
@@ -272,7 +272,7 @@ import Testing
     }
 }
 
-func twoFloorUsdz() -> Data {
+func twoFloorUsdz() throws -> Data {
     let root = """
     #usda 1.0
     (
@@ -326,7 +326,7 @@ func twoFloorUsdz() -> Data {
         indices: "0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6",
         matrix: "( (1, 0, 0, 0), (0, 0, 1, 0), (0, 1, 0, 0), (0, 0, 0, 1) )"
     )
-    return zipData([
+    return try zipData([
         "Scan.usda": Data(root.utf8),
         "assets/Mesh/Floors/Floor0.usda": Data(salon.utf8),
         "assets/Mesh/Floors/Floor1.usda": Data(bed.utf8),
@@ -375,20 +375,25 @@ private func boxUsda(name: String, category: String, hx: Double, hy: Double, hz:
     )
 }
 
-private func zipData(_ files: [String: Data]) -> Data {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+private func zipData(_ files: [String: Data]) throws -> Data {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let dir = root.appendingPathComponent("input", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)
     for (name, data) in files {
         let url = dir.appendingPathComponent(name)
-        try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try! data.write(to: url)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url)
     }
-    let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
+    let zipURL = root.appendingPathComponent("scan.zip")
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     task.currentDirectoryURL = dir
     task.arguments = ["-r", "-q", zipURL.path, "."]
-    try! task.run()
+    try task.run()
     task.waitUntilExit()
-    return try! Data(contentsOf: zipURL)
+    try #require(task.terminationReason == .exit && task.terminationStatus == 0,
+                 "zip failed: \(task.terminationReason), status \(task.terminationStatus)")
+    return try Data(contentsOf: zipURL)
 }
