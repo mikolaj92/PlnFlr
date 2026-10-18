@@ -40,7 +40,7 @@ import Testing
     }
 
     let restored = try storage.load()
-    #expect(restored.version == 1)
+    #expect(restored.version == 2)
     #expect(restored.state.projects[0].scans[0].transform == placed)
     #expect(restored.state.projects[0].scans[0].sourceUsdz == sourceUsdz)
     #expect(restored.state.projects[0].scans[0].roomPlanStructure?.structure == structure)
@@ -64,7 +64,7 @@ import Testing
     }
     """.utf8)
     let decoded = try JSONDecoder().decode(WorkspaceArchive.self, from: legacy)
-    #expect(decoded.version == 1)
+    #expect(decoded.version == 2)
     #expect(decoded.state.projects[0].scans[0].transform == ScanTransform.identity)
     #expect(decoded.state.projects[0].scanPlacements.isEmpty)
 
@@ -122,7 +122,7 @@ import Testing
     }
 
     let restored = try storage.load()
-    #expect(restored.version == 1)
+    #expect(restored.version == 2)
     #expect(restored.state.projects[0].floorVariants[0].areaNetMm2 == firstPlan.bom.areaNetMm2 + secondPlan.bom.areaNetMm2)
     #expect(restored.state.projects[0].scans[0].sourceUsdz == source)
 
@@ -299,7 +299,7 @@ import Testing
 
     let decoded = try JSONDecoder().decode(WorkspaceArchive.self, from: legacyArchive)
 
-    #expect(decoded.version == 1)
+    #expect(decoded.version == 2)
     #expect(decoded.state.projects[0].geometryCorrections.isEmpty)
 }
 
@@ -326,7 +326,7 @@ import Testing
 
     let decoded = try JSONDecoder().decode(WorkspaceArchive.self, from: legacyArchive)
 
-    #expect(decoded.version == 1)
+    #expect(decoded.version == 2)
     #expect(decoded.state.projects.count == 1)
     #expect(decoded.state.projects[0].name == "Dom")
     #expect(decoded.state.projects[0].scans[0].label == "Stary skan")

@@ -2,11 +2,46 @@ import ComposableArchitecture2
 import Foundation
 import PlnFlrLayout
 
+/// Identity and optional storey assignment, independent of layout geometry and paid access.
+public struct WorkspaceRoom: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var storeyID: UUID?
+
+    public init(id: UUID, storeyID: UUID? = nil) {
+        self.id = id
+        self.storeyID = storeyID
+    }
+
+    static func legacyID(_ floorID: UUID) -> UUID {
+        var bytes = floorID.uuid
+        bytes.0 ^= 0x80
+        return UUID(uuid: bytes)
+    }
+}
+
+/// Elevation in the shared house coordinates; assignment never moves a scan.
+public struct WorkspaceStorey: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var elevationMm: Int
+
+    public init(id: UUID, elevationMm: Int) {
+        self.id = id
+        self.elevationMm = elevationMm
+    }
+}
+
+public enum ProjectScope: Codable, Equatable, Sendable {
+    case room(UUID)
+    case storey(UUID)
+    case house
+}
+
 /// A durable snapshot of a floor before or after a user-initiated geometry operation.
 public struct FloorSnapshot: Codable, Equatable, Sendable {
     public let id: UUID
     public let name: String
     public let storey: String?
+    public let roomID: UUID?
     public let room: Room
     public let thresholds: [Threshold]
     public let windows: [Opening]
@@ -23,6 +58,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
         id = state.id
         name = state.name
         storey = state.storey
+        roomID = state.roomID
         room = state.room
         thresholds = state.thresholds
         windows = state.windows
@@ -49,6 +85,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
             accessID: accessID
         )
         state.storey = storey
+        state.roomID = roomID ?? WorkspaceRoom.legacyID(id)
         state.material = material
         state.packSize = packSize
         state.groutMm = groutMm
@@ -299,6 +336,7 @@ public struct Workspace {
             public var id: UUID { floorID }
             public var name: String
             public var storey: String?
+            public var roomID: UUID
             public var plan: LayoutPlan?
             public var plankLengthM: String
             public var plankWidthM: String
@@ -317,8 +355,10 @@ public struct Workspace {
                 plankWidthM: String = "0.156",
                 plan: LayoutPlan? = nil,
                 error: String? = nil,
-                accessID: UUID? = nil
+                accessID: UUID? = nil,
+                roomID: UUID? = nil
             ) {
+                self.roomID = roomID ?? WorkspaceRoom.legacyID(id)
                 self.accessID = accessID ?? id
                 self.error = error
                 self.expansionMm = expansionMm
@@ -355,6 +395,9 @@ public struct Workspace {
         public struct State: Equatable, Identifiable, Sendable {
             public var error: String?
             public var floors: [Floor.State]
+            public var rooms: [WorkspaceRoom]
+            public var storeys: [WorkspaceStorey]
+            public var scope: ProjectScope?
             public var geometryCorrections: [GeometryCorrection]
             public var undoneGeometryCorrectionIDs: [UUID]
             public var scanPlacements: [ScanPlacement]
@@ -392,8 +435,14 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
-                parts: [ModelPart] = []
+                parts: [ModelPart] = [],
+                rooms: [WorkspaceRoom]? = nil,
+                storeys: [WorkspaceStorey] = [],
+                scope: ProjectScope? = nil
             ) {
+                self.rooms = rooms ?? Array(Set(floors.map(\.roomID))).sorted { $0.uuidString < $1.uuidString }.map { WorkspaceRoom(id: $0) }
+                self.storeys = storeys
+                self.scope = scope
                 self.error = error
                 self.floors = floors
                 self.geometryCorrections = geometryCorrections
@@ -439,14 +488,20 @@ public struct Workspace {
                           !state.undoneGeometryCorrectionIDs.contains($0.id)
                       }),
                       correction.after.allSatisfy({ after in
-                          state.floors.contains(where: { $0.id == after.id })
+                          state.floors.contains(where: { FloorSnapshot($0) == after })
+                      }),
+                      correction.before.allSatisfy({ before in
+                          !state.floors.contains { $0.id == before.id && !correction.after.map(\.id).contains($0.id) }
                       }) else { return }
                 let resultIDs = Set(correction.after.map(\.id))
-                state.floors.removeAll { resultIDs.contains($0.id) }
-                state.floors.append(contentsOf: correction.before.map(\.state))
-                state.undoneGeometryCorrectionIDs.append(correction.id)
-                state.selectedFloorIDs = correction.before.map(\.id)
-                state.error = nil
+                var candidate = state
+                candidate.floors.removeAll { resultIDs.contains($0.id) }
+                candidate.floors.append(contentsOf: correction.before.map(\.state))
+                candidate.undoneGeometryCorrectionIDs.append(correction.id)
+                candidate.selectedFloorIDs = correction.before.map(\.id)
+                guard candidate.isValid else { return }
+                candidate.error = nil
+                state = candidate
             }
             Update { state, action in
                 switch action {
@@ -495,15 +550,20 @@ public struct Workspace {
                           let before = variant.before else { return }
                     let ids = Set(variant.floorIDs)
                     guard ids == Set(before.map(\.id)),
-                          ids.isSubset(of: Set(state.floors.map(\.id))) else { return }
-                    for index in state.floors.indices {
-                        if let snapshot = before.first(where: { $0.id == state.floors[index].id }) {
-                            state.floors[index] = snapshot.state
+                          ids.isSubset(of: Set(state.floors.map(\.id))),
+                          let inputs = variant.inputs,
+                          inputs.allSatisfy({ input in state.floors.contains { FloorSnapshot($0) == input } }) else { return }
+                    var candidate = state
+                    for index in candidate.floors.indices {
+                        if let snapshot = before.first(where: { $0.id == candidate.floors[index].id }) {
+                            candidate.floors[index] = snapshot.state
                         }
                     }
-                    state.selectedFloorIDs = variant.selectedFloorIDsBefore ?? before.map(\.id)
-                    state.undoneFloorVariantIDs.append(variant.id)
-                    state.error = nil
+                    candidate.selectedFloorIDs = variant.selectedFloorIDsBefore ?? before.map(\.id)
+                    candidate.undoneFloorVariantIDs.append(variant.id)
+                    guard candidate.isValid else { return }
+                    candidate.error = nil
+                    state = candidate
                 default:
                     break
                 }
@@ -707,7 +767,9 @@ public struct Workspace {
             case .appStarted:
                 guard !state.hasLoaded else { return }
                 do {
-                    let restored = try files.load().state
+                    let archive = try files.load()
+                    try archive.validate()
+                    let restored = archive.state
                     state.projects = restored.projects
                     state.selectedProjectID = restored.selectedProjectID
                     state.freeRoomID = restored.freeRoomID
@@ -771,6 +833,7 @@ public struct Workspace {
                     let name = state.manualName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let floor = Floor.State(id: uuid(), name: name.isEmpty ? "Pokój" : name, room: room)
                     state.projects[index].floors.append(floor)
+                    state.projects[index].rooms.append(WorkspaceRoom(id: floor.roomID))
                     state.projects[index].selectedFloorIDs = [floor.id]
                     state.manualRoomError = nil
                     state.isAddingRoom = false
@@ -822,6 +885,7 @@ public struct Workspace {
                         )
                         floorIDs.append(floor.floorID)
                         state.projects[index].floors.append(floor)
+                        state.projects[index].rooms.append(WorkspaceRoom(id: floor.roomID))
                     }
                     if let first = floorIDs.first {
                         state.projects[index].selectedFloorIDs = [first]
@@ -872,6 +936,8 @@ public struct Workspace {
                         plankWidthM: original.plankWidthM,
                         accessID: original.accessID
                     )
+                    first.roomID = original.roomID
+                    second.roomID = original.roomID
                     first.copyMaterial(from: original)
                     second.copyMaterial(from: original)
                     first.storey = original.storey
@@ -882,10 +948,13 @@ public struct Workspace {
                         before: [FloorSnapshot(original)],
                         after: [FloorSnapshot(first), FloorSnapshot(second)]
                     )
-                    state.projects[index].floors.replaceSubrange(floorIndex...floorIndex, with: [first, second])
-                    state.projects[index].geometryCorrections.append(correction)
-                    state.projects[index].selectedFloorIDs = [first.floorID]
-                    state.projects[index].error = nil
+                    var candidate = state.projects[index]
+                    candidate.floors.replaceSubrange(floorIndex...floorIndex, with: [first, second])
+                    candidate.geometryCorrections.append(correction)
+                    candidate.selectedFloorIDs = [first.floorID]
+                    guard candidate.isValid else { throw MaterialInputError.invalid }
+                    candidate.error = nil
+                    state.projects[index] = candidate
                 } catch {
                     state.projects[index].error = error.localizedDescription
                 }
@@ -896,19 +965,21 @@ public struct Workspace {
                 let selected = state.projects[index].floors.filter { selectedIDs.contains($0.floorID) }
                 guard selected.count == 2 else { return }
                 do {
+                    guard selected[0].canJoin(selected[1]) else { throw MaterialInputError.invalid }
                     let joined = try joinRooms(selected[0].room, selected[1].room)
                     let inputs = selected.map(FloorSnapshot.init)
                     var item = Floor.State(
                         id: uuid(),
                         name: selected[0].name,
                         room: joined,
-                        thresholds: selected[0].thresholds + selected[1].thresholds,
-                        windows: selected[0].windows + selected[1].windows,
+                        thresholds: selected[0].thresholds == selected[1].thresholds ? selected[0].thresholds : selected[0].thresholds + selected[1].thresholds,
+                        windows: selected[0].windows == selected[1].windows ? selected[0].windows : selected[0].windows + selected[1].windows,
                         expansionMm: selected[0].expansionMm,
                         plankLengthM: selected[0].plankLengthM,
                         plankWidthM: selected[0].plankWidthM,
                         accessID: selected[0].accessID == selected[1].accessID ? selected[0].accessID : nil
                     )
+                    item.roomID = selected[0].roomID
                     item.copyMaterial(from: selected[0])
                     item.storey = selected[0].storey == selected[1].storey ? selected[0].storey : nil
                     let correction = GeometryCorrection(
@@ -917,11 +988,14 @@ public struct Workspace {
                         before: inputs,
                         after: [FloorSnapshot(item)]
                     )
-                    state.projects[index].floors.removeAll { selectedIDs.contains($0.floorID) }
-                    state.projects[index].floors.append(item)
-                    state.projects[index].geometryCorrections.append(correction)
-                    state.projects[index].selectedFloorIDs = [item.floorID]
-                    state.projects[index].error = nil
+                    var candidate = state.projects[index]
+                    candidate.floors.removeAll { selectedIDs.contains($0.floorID) }
+                    candidate.floors.append(item)
+                    candidate.geometryCorrections.append(correction)
+                    candidate.selectedFloorIDs = [item.floorID]
+                    guard candidate.isValid else { throw MaterialInputError.invalid }
+                    candidate.error = nil
+                    state.projects[index] = candidate
                 } catch {
                     state.projects[index].error = error.localizedDescription
                 }
@@ -952,7 +1026,9 @@ public struct Workspace {
 
     private func save(_ state: inout State) {
         do {
-            try files.save(WorkspaceArchive(state))
+            let archive = WorkspaceArchive(state)
+            try archive.validate()
+            try files.save(archive)
             state.storageError = nil
         } catch {
             state.storageError = "Nie udało się zapisać projektów: \(error.localizedDescription)"
@@ -960,7 +1036,21 @@ public struct Workspace {
     }
 }
 
+extension Workspace.Floor.State {
+    func canJoin(_ other: Self) -> Bool {
+        roomID == other.roomID && accessID == other.accessID && storey == other.storey
+            && material == other.material && packSize == other.packSize && groutMm == other.groutMm
+            && expansionMm == other.expansionMm && finish == other.finish
+            && plankLengthM == other.plankLengthM && plankWidthM == other.plankWidthM
+    }
+}
+
 extension Workspace.Project.State {
+    var isValid: Bool {
+        let archive = WorkspaceArchive(Workspace.State(projects: [self]))
+        return (try? archive.validate()) != nil
+    }
+
     mutating func detachPart(_ id: UUID) {
         parts.removeAll { $0.id == id }
         error = nil

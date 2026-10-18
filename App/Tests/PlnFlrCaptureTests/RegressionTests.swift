@@ -21,7 +21,7 @@ import Testing
     #expect(try files.load().projects.isEmpty)
     var future = WorkspaceArchive(Workspace.State())
     future.version = 999
-    try files.save(future)
+    try JSONEncoder().encode(future).write(to: files.url)
     #expect(throws: ArchiveError.self) { try files.load() }
 }
 
@@ -35,7 +35,7 @@ import Testing
     state.freeRoomID = floor.id
     let store = await TestStoreActor(initialState: state) { Workspace() }
     let parts = try splitRoom(floor.room, axis: .x, atMm: 1500)
-    var first = Workspace.Floor.State(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Salon A", room: parts.0!, plankWidthM: "0.200", accessID: floor.id)
+    var first = Workspace.Floor.State(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Salon A", room: parts.0!, plankWidthM: "0.200", accessID: floor.id, roomID: floor.roomID)
     first.material = .tile
     first.groutMm = "2"
     first.packSize = "4"
