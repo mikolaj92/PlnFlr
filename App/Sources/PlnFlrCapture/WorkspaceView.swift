@@ -105,11 +105,12 @@ public struct WorkspaceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     ProjectHeaderView(store: projectStore)
+                    HouseMapView(store: projectStore)
+                    FurnitureView(store: projectStore)
                     UtilitiesView(store: projectStore)
                     DrillCheckView(routes: project.utilities)
                         .id(project.projectID)
                     if !project.scans.isEmpty {
-                        ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
@@ -203,10 +204,142 @@ private struct ProjectHeaderView: View {
     }
 }
 
+private struct HouseMapView: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+    @State private var scene: SCNScene?
+    @State private var errors: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Mapa domu 3D").font(.headline)
+            Button("Cały dom") { $store.mapScope.wrappedValue = .house }
+            ForEach(Array(Set(store.floors.map { $0.storey ?? "Kondygnacja 1" })).sorted(), id: \.self) { name in
+                Button("Kondygnacja: \(name)") { $store.mapScope.wrappedValue = .storey(name) }
+            }
+            ForEach(store.floors) { floor in
+                Button("Pokój: \(floor.name)") { $store.mapScope.wrappedValue = .room(floor.id) }
+            }
+            Text(scopeLabel).font(.subheadline)
+            if let scene {
+                SceneView(scene: scene, pointOfView: scene.rootNode.childNode(withName: "utilities.camera", recursively: false),
+                          options: [.allowsCameraControl, .autoenablesDefaultLighting], preferredFramesPerSecond: 30)
+                    .frame(height: 360)
+                    .accessibilityLabel("Mapa domu ze skanami, pokojami, instalacjami i meblami. Przeciągnij, aby obrócić widok.")
+            }
+            Text("Wspólne współrzędne projektu. Nieprzypisane skany, ściany i instalacje są widoczne tylko w zakresie domu.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(errors, id: \.self) { message in
+                Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+        }
+        .onChange(of: WorkspaceArchive.ProjectRecord(store.state), initial: true) { _, _ in refresh() }
+        .onChange(of: store.mapScope) { _, _ in refresh() }
+    }
+
+    private var scopeLabel: String {
+        switch store.mapScope {
+        case .house: "Zakres: cały dom"
+        case .storey(let name): "Zakres: \(name)"
+        case .room(let id): "Zakres: \(store.floors.first(where: { $0.id == id })?.name ?? "Brak pokoju")"
+        }
+    }
+
+    private func refresh() {
+        let wholeHouse = store.mapScope == .house
+        let preview = HouseScene.scans(wholeHouse ? store.scans : [])
+        errors = preview.errors
+        scene = HouseScene.scene(walls: wholeHouse ? store.walls : [], routes: wholeHouse ? store.utilities : [],
+                                 furniture: store.state.mapFurniture, floors: store.state.mapFloors, scanScene: preview.scene)
+    }
+}
+
+private struct FurnitureView: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+    @State private var draft: FurnitureDraft?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Meble i wyposażenie").font(.headline)
+            Button("Dodaj prostopadłościan") {
+                draft = FurnitureDraft(roomID: store.state.mapFloors.first?.id)
+            }
+            .disabled(store.floors.isEmpty)
+            Button("Cofnij zmianę mebli") { store.send(.undoLastFurnitureButtonTapped) }
+                .disabled(store.furnitureHistory.isEmpty)
+            ForEach(store.state.mapFurniture) { item in
+                VStack(alignment: .leading) {
+                    Text(item.name).font(.headline)
+                    Text("\(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm · \(item.yawDegrees)° · \(item.state.label)")
+                    Text("Źródło: \(item.source?.label ?? "Nieznane") · Pokój: \(store.floors.first(where: { $0.id == item.roomID })?.name ?? "Nieprzypisany")")
+                    HStack {
+                        Button("Edytuj: \(item.name)") { draft = FurnitureDraft(item: item) }
+                        Button(item.hidden ? "Pokaż: \(item.name)" : "Ukryj: \(item.name)") {
+                            store.send(.toggleFurnitureVisibility(item.id))
+                        }
+                    }
+                }
+            }
+            if let error = store.furnitureError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+        }
+        .sheet(item: $draft) { value in FurnitureEditor(store: store, draft: value) }
+    }
+}
+
+private struct FurnitureEditor: View {
+    @Bindable var store: StoreOf<Workspace.Project>
+    @State var draft: FurnitureDraft
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Nazwa mebla", text: $draft.name)
+                Picker("Pokój", selection: $draft.roomID) {
+                    Text("Wybierz pokój").tag(Optional<UUID>.none)
+                    ForEach(store.floors) { floor in Text(floor.name).tag(Optional(floor.id)) }
+                }
+                TextField("Szerokość X (mm)", text: $draft.width)
+                TextField("Głębokość Y (mm)", text: $draft.depth)
+                TextField("Wysokość Z (mm)", text: $draft.height)
+                Section("Środek bryły we współrzędnych projektu") {
+                    TextField("X (mm)", text: $draft.x)
+                    TextField("Y (mm)", text: $draft.y)
+                    TextField("Z (mm)", text: $draft.z)
+                    TextField("Obrót wokół osi pionowej (stopnie)", text: $draft.yawDegrees)
+                }
+                Picker("Stan", selection: $draft.state) {
+                    ForEach(RecordState.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Picker("Źródło", selection: $draft.source) {
+                    Text("Nieznane / wybierz źródło").tag(Optional<UtilitySource>.none)
+                    ForEach(UtilitySource.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                }
+                Toggle("Ukryty", isOn: $draft.hidden)
+                if let error = store.furnitureError {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            .navigationTitle("Mebel")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        store.send(.saveFurniture(draft))
+                        if store.furnitureError == nil { dismiss() }
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 320, minHeight: 480)
+    }
+}
+
 private struct UtilitiesView: View {
     @Bindable var store: StoreOf<Workspace.Project>
     @State private var draft: UtilityRouteDraft?
-    @State private var scene: SCNScene?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -214,12 +347,6 @@ private struct UtilitiesView: View {
             if store.utilities.isEmpty {
                 Text("Przebieg instalacji nieznany")
             } else {
-                if let scene {
-                    SceneView(scene: scene, pointOfView: scene.rootNode.childNode(withName: "utilities.camera", recursively: false),
-                              options: [.allowsCameraControl, .autoenablesDefaultLighting], preferredFramesPerSecond: 30)
-                        .frame(height: 360)
-                        .accessibilityLabel("Trasy instalacji 3D. Przeciągnij, aby obrócić widok.")
-                }
                 ForEach(store.utilities) { route in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(route.name).font(.headline)
@@ -232,9 +359,6 @@ private struct UtilitiesView: View {
             Text("Mapa nie potwierdza kompletności instalacji ani bezpieczeństwa wiercenia.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Dodaj trasę instalacji") { draft = UtilityRouteDraft() }
-        }
-        .onChange(of: store.utilities, initial: true) { _, routes in
-            scene = HouseScene.scene(walls: [], routes: routes, furniture: [])
         }
         .sheet(item: $draft) { value in
             UtilityRouteEditor(store: store, draft: value)

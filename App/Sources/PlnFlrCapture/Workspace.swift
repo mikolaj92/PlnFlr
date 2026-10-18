@@ -235,6 +235,69 @@ public struct UtilityRouteDraft: Identifiable, Equatable, Sendable {
     }
 }
 
+public enum MapScope: Equatable, Sendable {
+    case house
+    case storey(String)
+    case room(UUID)
+}
+
+public struct FurnitureDraft: Identifiable, Equatable, Sendable {
+    public var id = UUID()
+    public var itemID: UUID?
+    public var name: String
+    public var roomID: UUID?
+    public var width: String
+    public var depth: String
+    public var height: String
+    public var x: String
+    public var y: String
+    public var z: String
+    public var yawDegrees: String
+    public var state: RecordState
+    public var source: UtilitySource?
+    public var hidden: Bool
+
+    public init(item: FurnitureItem? = nil, roomID: UUID? = nil) {
+        itemID = item?.id
+        name = item?.name ?? "Mebel"
+        self.roomID = item?.roomID ?? roomID
+        width = item.map { String($0.size.xMm) } ?? "800"
+        depth = item.map { String($0.size.yMm) } ?? "600"
+        height = item.map { String($0.size.zMm) } ?? "800"
+        x = item.map { String($0.origin.xMm) } ?? "0"
+        y = item.map { String($0.origin.yMm) } ?? "0"
+        z = item.map { String($0.origin.zMm) } ?? "400"
+        yawDegrees = item.map { String($0.yawDegrees) } ?? "0"
+        state = item?.state ?? .planned
+        source = item?.source
+        hidden = item?.hidden ?? false
+    }
+
+    public func validatedItem(id: UUID, roomIDs: Set<UUID>) throws -> FurnitureItem {
+        let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty,
+              roomID.map(roomIDs.contains) ?? (itemID != nil),
+              let width = Int(width), width > 0,
+              let depth = Int(depth), depth > 0,
+              let height = Int(height), height > 0,
+              let x = Int(x), let y = Int(y), let z = Int(z),
+              let yaw = Int(yawDegrees), itemID != nil || source != nil else {
+            throw FurnitureInputError.invalid
+        }
+        return FurnitureItem(id: id, name: label,
+                             size: ScenePoint(xMm: width, yMm: depth, zMm: height),
+                             origin: ScenePoint(xMm: x, yMm: y, zMm: z), state: state,
+                             hidden: hidden, roomID: roomID, yawDegrees: yaw, source: source)
+    }
+}
+
+public enum FurnitureInputError: LocalizedError {
+    case invalid
+    public var errorDescription: String? {
+        "Podaj nazwę, istniejący pokój, dodatnie wymiary i całkowite współrzędne w mm oraz obrót w stopniach. Nowy mebel wymaga źródła."
+    }
+}
+
 @Feature
 public struct Workspace {
     public static let loadFailureMessage = "Nie udało się odczytać projektów. Plik pozostaje bez zmian. Spróbuj ponownie lub odzyskaj go z kopii zapasowej."
@@ -298,7 +361,7 @@ public struct Workspace {
             public var floorID: UUID
             public var id: UUID { floorID }
             public var name: String
-            public var storey: String?
+            public var storey: String? = "Kondygnacja 1"
             public var plan: LayoutPlan?
             public var plankLengthM: String
             public var plankWidthM: String
@@ -365,6 +428,9 @@ public struct Workspace {
             public var utilities: [UtilityRoute]
             public var utilityError: String?
             public var furniture: [FurnitureItem]
+            public var furnitureHistory: [[FurnitureItem]] = []
+            public var furnitureError: String?
+            public var mapScope: MapScope = .house
             public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
@@ -424,6 +490,9 @@ public struct Workspace {
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
             case saveUtility(UtilityRouteDraft)
+            case saveFurniture(FurnitureDraft)
+            case toggleFurnitureVisibility(UUID)
+            case undoLastFurnitureButtonTapped
             case undoLastPartButtonTapped
         }
 
@@ -442,6 +511,10 @@ public struct Workspace {
                           state.floors.contains(where: { $0.id == after.id })
                       }) else { return }
                 let resultIDs = Set(correction.after.map(\.id))
+                guard !state.furniture.contains(where: { $0.roomID.map(resultIDs.contains) == true }) else {
+                    state.error = "Najpierw przypisz meble do innego pokoju."
+                    return
+                }
                 state.floors.removeAll { resultIDs.contains($0.id) }
                 state.floors.append(contentsOf: correction.before.map(\.state))
                 state.undoneGeometryCorrectionIDs.append(correction.id)
@@ -450,6 +523,45 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
+                case .saveFurniture(let draft):
+                    do {
+                        if let id = draft.itemID, !state.furniture.contains(where: { $0.id == id }) {
+                            throw FurnitureInputError.invalid
+                        }
+                        let item = try draft.validatedItem(id: draft.itemID ?? uuid(), roomIDs: Set(state.floors.map(\.id)))
+                        guard draft.itemID != nil || !state.furniture.contains(where: { $0.id == item.id }) else {
+                            throw FurnitureInputError.invalid
+                        }
+                        var next = state.furniture
+                        if let index = next.firstIndex(where: { $0.id == item.id }) {
+                            next[index] = item
+                        } else {
+                            next.append(item)
+                        }
+                        if next != state.furniture {
+                            state.furnitureHistory.append(state.furniture)
+                            state.furniture = next
+                        }
+                        state.furnitureError = nil
+                    } catch {
+                        state.furnitureError = error.localizedDescription
+                    }
+                case .toggleFurnitureVisibility(let id):
+                    guard let index = state.furniture.firstIndex(where: { $0.id == id }) else { return }
+                    state.furnitureHistory.append(state.furniture)
+                    state.furniture[index].hidden.toggle()
+                    state.furnitureError = nil
+                case .undoLastFurnitureButtonTapped:
+                    guard let previous = state.furnitureHistory.last else { return }
+                    guard previous.allSatisfy({ item in
+                        item.roomID == nil || state.floors.contains(where: { $0.id == item.roomID })
+                    }) else {
+                        state.furnitureError = "Nie można cofnąć: przypisany pokój już nie istnieje."
+                        return
+                    }
+                    state.furniture = previous
+                    state.furnitureHistory.removeLast()
+                    state.furnitureError = nil
                 case .saveUtility(let draft):
                     do {
                         let route = try draft.validatedRoute(id: draft.routeID ?? uuid())
@@ -840,6 +952,10 @@ public struct Workspace {
                 else { return }
                 do {
                     let original = state.projects[index].floors[floorIndex]
+                    guard !state.projects[index].furniture.contains(where: { $0.roomID == original.id }) else {
+                        state.projects[index].error = "Najpierw przypisz meble do innego pokoju."
+                        return
+                    }
                     let atMm = try metresToMm(state.projects[index].splitAtM)
                     let (left, right) = try splitRoom(
                         original.room,
@@ -895,6 +1011,12 @@ public struct Workspace {
                 let selectedIDs = state.projects[index].selectedFloorIDs
                 let selected = state.projects[index].floors.filter { selectedIDs.contains($0.floorID) }
                 guard selected.count == 2 else { return }
+                guard !state.projects[index].furniture.contains(where: { item in
+                    item.roomID.map(selectedIDs.contains) == true
+                }) else {
+                    state.projects[index].error = "Najpierw przypisz meble do innego pokoju."
+                    return
+                }
                 do {
                     let joined = try joinRooms(selected[0].room, selected[1].room)
                     let inputs = selected.map(FloorSnapshot.init)
@@ -961,6 +1083,20 @@ public struct Workspace {
 }
 
 extension Workspace.Project.State {
+    public var mapFloors: [Workspace.Floor.State] {
+        switch mapScope {
+        case .house: floors
+        case .storey(let name): floors.filter { ($0.storey ?? "Kondygnacja 1") == name }
+        case .room(let id): floors.filter { $0.id == id }
+        }
+    }
+
+    public var mapFurniture: [FurnitureItem] {
+        if mapScope == .house { return furniture }
+        let ids = Set(mapFloors.map(\.id))
+        return furniture.filter { $0.roomID.map(ids.contains) == true }
+    }
+
     mutating func detachPart(_ id: UUID) {
         parts.removeAll { $0.id == id }
         error = nil
