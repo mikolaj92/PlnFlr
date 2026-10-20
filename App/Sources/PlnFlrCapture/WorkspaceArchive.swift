@@ -191,8 +191,18 @@ public struct WorkspaceStorage: Sendable {
             return WorkspaceArchive(Workspace.State())
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
+        try validate(archive)
+        return archive
+    }
+
+    private func validate(_ archive: WorkspaceArchive) throws {
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
         for project in archive.projects {
+            guard Set(project.furniture.map(\.id)).count == project.furniture.count else { throw MaterialInputError.invalid }
+            for item in project.furniture {
+                guard !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      item.size.xMm > 0, item.size.yMm > 0, item.size.zMm > 0 else { throw MaterialInputError.invalid }
+            }
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
@@ -215,10 +225,13 @@ public struct WorkspaceStorage: Sendable {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
         }
-        return archive
     }
 
     public func save(_ archive: WorkspaceArchive) throws {
+        try validate(archive)
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try load()
+        }
         let data = try JSONEncoder().encode(archive)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
