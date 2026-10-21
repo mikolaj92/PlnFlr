@@ -108,8 +108,8 @@ public struct WorkspaceView: View {
                     UtilitiesView(store: projectStore)
                     DrillCheckView(routes: project.utilities)
                         .id(project.projectID)
-                    if !project.scans.isEmpty {
-                        ScanSceneView(scans: project.scans)
+                    if !project.scans.isEmpty || !project.furniture.isEmpty {
+                        ScanSceneView(scans: project.scans, furniture: project.furniture)
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
@@ -406,6 +406,7 @@ private struct UtilityRouteEditor: View {
 private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
     var selection: [String]? = nil
+    var furniture: [FurnitureItem] = []
     var title = "Wspólna mapa skanów 3D"
     var allowsWallAppearance = false
     @State private var scene: SCNScene?
@@ -453,6 +454,16 @@ private struct ScanSceneView: View {
             ForEach(Array(errors.enumerated()), id: \.offset) { _, message in
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
+            ForEach(furniture) { item in
+                if !item.hidden {
+                    VStack(alignment: .leading) {
+                        Text(item.name).font(.headline)
+                        Text("Wymiary: \(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm")
+                        Text(item.state == .existing ? "Stan: istniejący" : "Stan: planowany")
+                        Text("Pochodzenie: niezapisane w modelu")
+                    }
+                }
+            }
             Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
                 .font(.caption).foregroundStyle(.secondary)
             Text("Ustawienie zmienia tylko podgląd źródła. Podłogi i obliczenia pozostają bez zmian.")
@@ -460,10 +471,11 @@ private struct ScanSceneView: View {
         }
         .onChange(of: scans, initial: true) { _, _ in refreshScene() }
         .onChange(of: selection) { _, _ in refreshScene() }
+        .onChange(of: furniture) { _, _ in refreshScene() }
     }
 
     private func refreshScene() {
-        let preview = HouseScene.scans(scans, selection: selection)
+        let preview = HouseScene.scans(scans, selection: selection, furniture: furniture)
         scene = preview.scene.rootNode.childNode(withName: "scans.camera", recursively: false) == nil ? nil : preview.scene
         errors = preview.errors
         #if os(iOS)

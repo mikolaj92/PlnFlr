@@ -401,7 +401,7 @@ public enum HouseScene {
         try applySelection(paths, to: sourceNode(scan))
     }
 
-    static func scans(_ scans: [Workspace.Scan.State], selection: [String]? = nil) -> (scene: SCNScene, errors: [String]) {
+    static func scans(_ scans: [Workspace.Scan.State], selection: [String]? = nil, furniture: [FurnitureItem] = []) -> (scene: SCNScene, errors: [String]) {
         let scene = SCNScene()
         var errors: [String] = []
         for scan in scans {
@@ -414,6 +414,7 @@ public enum HouseScene {
                 errors.append("\(scan.label): \(error.localizedDescription)")
             }
         }
+        addFurniture(furniture, to: scene)
         if !scene.rootNode.childNodes.isEmpty {
             let bounds = scene.rootNode.boundingBox
             let minimum = SIMD3<Double>(Double(bounds.min.x), Double(bounds.min.y), Double(bounds.min.z))
@@ -465,12 +466,7 @@ public enum HouseScene {
             }
             scene.rootNode.addChildNode(node)
         }
-        for item in furniture where !item.hidden {
-            let node = SCNNode(geometry: SCNBox(width: Double(item.size.xMm) / 1000, height: Double(item.size.zMm) / 1000, length: Double(item.size.yMm) / 1000, chamferRadius: 0))
-            node.name = "furniture.\(item.id.uuidString)"
-            node.position = SCNVector3(Double(item.origin.xMm) / 1000, Double(item.origin.zMm) / 1000, Double(item.origin.yMm) / 1000)
-            scene.rootNode.addChildNode(node)
-        }
+        addFurniture(furniture, to: scene)
         if !scene.rootNode.childNodes.isEmpty {
             let bounds = scene.rootNode.boundingBox
             let minimum = SIMD3<Double>(Double(bounds.min.x), Double(bounds.min.y), Double(bounds.min.z))
@@ -489,6 +485,15 @@ public enum HouseScene {
             scene.rootNode.addChildNode(camera)
         }
         return scene
+    }
+
+    private static func addFurniture(_ furniture: [FurnitureItem], to scene: SCNScene) {
+        for item in furniture where !item.hidden {
+            let node = SCNNode(geometry: SCNBox(width: Double(item.size.xMm) / 1000, height: Double(item.size.zMm) / 1000, length: Double(item.size.yMm) / 1000, chamferRadius: 0))
+            node.name = "furniture.\(item.id.uuidString)"
+            node.position = SCNVector3(Double(item.origin.xMm) / 1000, Double(item.origin.zMm) / 1000, Double(item.origin.yMm) / 1000)
+            scene.rootNode.addChildNode(node)
+        }
     }
 
     private static func span(_ wall: WallSegment) -> Double {
