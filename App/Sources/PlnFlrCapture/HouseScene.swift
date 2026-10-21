@@ -401,7 +401,7 @@ public enum HouseScene {
         try applySelection(paths, to: sourceNode(scan))
     }
 
-    static func scans(_ scans: [Workspace.Scan.State], selection: [String]? = nil) -> (scene: SCNScene, errors: [String]) {
+    static func scans(_ scans: [Workspace.Scan.State], selection: [String]? = nil, furniture: [FurnitureItem] = []) -> (scene: SCNScene, errors: [String]) {
         let scene = SCNScene()
         var errors: [String] = []
         for scan in scans {
@@ -413,6 +413,10 @@ public enum HouseScene {
             } catch {
                 errors.append("\(scan.label): \(error.localizedDescription)")
             }
+        }
+        for node in Self.scene(walls: [], routes: [], furniture: furniture).rootNode.childNodes
+        where node.name?.hasPrefix("furniture.") == true {
+            scene.rootNode.addChildNode(node)
         }
         if !scene.rootNode.childNodes.isEmpty {
             let bounds = scene.rootNode.boundingBox

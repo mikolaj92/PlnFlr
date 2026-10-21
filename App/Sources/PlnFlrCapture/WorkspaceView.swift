@@ -108,8 +108,10 @@ public struct WorkspaceView: View {
                     UtilitiesView(store: projectStore)
                     DrillCheckView(routes: project.utilities)
                         .id(project.projectID)
+                    if !project.scans.isEmpty || !project.furniture.isEmpty {
+                        ScanSceneView(scans: project.scans, furniture: project.furniture)
+                    }
                     if !project.scans.isEmpty {
-                        ScanSceneView(scans: project.scans)
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
@@ -405,6 +407,7 @@ private struct UtilityRouteEditor: View {
 
 private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
+    var furniture: [FurnitureItem] = []
     var selection: [String]? = nil
     var title = "Wspólna mapa skanów 3D"
     var allowsWallAppearance = false
@@ -460,10 +463,11 @@ private struct ScanSceneView: View {
         }
         .onChange(of: scans, initial: true) { _, _ in refreshScene() }
         .onChange(of: selection) { _, _ in refreshScene() }
+        .onChange(of: furniture) { _, _ in refreshScene() }
     }
 
     private func refreshScene() {
-        let preview = HouseScene.scans(scans, selection: selection)
+        let preview = HouseScene.scans(scans, selection: selection, furniture: furniture)
         scene = preview.scene.rootNode.childNode(withName: "scans.camera", recursively: false) == nil ? nil : preview.scene
         errors = preview.errors
         #if os(iOS)
