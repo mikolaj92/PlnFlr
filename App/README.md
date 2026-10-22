@@ -4,9 +4,7 @@ Kompas produktu i granica bezpieczeństwa instalacji są w [SOUL.md](../SOUL.md)
 
 Bez kont PlnFlr, bez backendu kont, bez TestFlight. Projekty zapisują się na urządzeniu. Uprawnienie Pro pochodzi wyłącznie ze zweryfikowanych transakcji StoreKit 2, nigdy z JSON projektu.
 
-## Cel i obecny zakres
-
-PlnFlr ma być mapą domu budowaną razem z użytkownikiem, nie tylko kalkulatorem podłóg. Kolejność rozwoju: **skany całego domu i poszczególnych pomieszczeń → podłogi → instalacje wodne, kanalizacyjne, elektryczne, powietrzne, wentylacyjne i inne → ewentualnie meblowanie domu**. Wszystko na tej samej, stopniowo uzupełnianej mapie. Bieżącym priorytetem są skany; meblowanie pozostaje pomysłem na później. Kierunek produktu jest zapisany w [głównym README](../README.md#kierunek-produktu).
+## Obecny zakres
 
 Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Na iOS jest także „Skanuj pomieszczenia”: interfejs Apple RoomPlan, zgoda na aparat, zakończenie pokoju, podgląd i opcja „Kolejny pokój”. Między pokojami używamy tej samej sesji AR (`stop(pauseARSession: false)`); Apple `StructureBuilder` składa pokoje przed zapisem. Projekt zachowuje pełne JSON-y oryginalnych `CapturedRoom` oraz wynikowy `CapturedStructure`. Błąd składania pozwala ponowić zapis bez utraty pokoi w bieżącej sesji. Anulowanie odrzuca niezapisany przebieg. Wymaga urządzenia obsługującego RoomPlan/LiDAR. Na Macu pozostaje import USDZ.
 
@@ -16,7 +14,7 @@ Jeden przebieg dotyczy jednej kondygnacji. Osobne sesje nie są automatycznie wy
 
 Otwórz **`App/PlnFlrWorkspace.xcworkspace`**, wybierz schemat **PlnFlr** i **My Mac**. Schemat Run ma podpięty `PlnFlr.storekit`: jeden produkt non-consumable `it.patryk.plnflr.pro`. Cena 49,99 jest wyłącznie testowa, nie jest decyzją cenową ani ofertą App Store Connect.
 
-Do budowania nie trzeba konta Apple Developer na macOS ani dla iOS Simulator. Instalacja na fizycznym iPhonie/iPadzie wymaga skonfigurowania podpisywania w Xcode. Minimum: iOS/macOS 26.4. Aktualny host ma Xcode 27 beta z SDK 27; minimalne wersje pozostają 26.4.
+Do budowania nie trzeba konta Apple Developer na macOS ani dla iOS Simulator. Instalacja na fizycznym iPhonie/iPadzie wymaga skonfigurowania podpisywania w Xcode. Minimum: iOS/macOS 26.4.
 
 ```sh
 # Z katalogu repo
@@ -52,8 +50,6 @@ Darmowy pokój jest lokalnym stanem produktu, nie odpornym na reinstalację licz
 
 ```sh
 swift test --package-path App
-swift test --package-path Kernel
-swift test --package-path Web
 
 # Renderowanie widoków i regresja otworów w dark mode
 xcodebuild -workspace App/PlnFlrWorkspace.xcworkspace -scheme PlnFlr \
@@ -68,9 +64,9 @@ xcodebuild -workspace App/PlnFlrWorkspace.xcworkspace -scheme PlnFlr \
   -only-testing:PlnFlrLocalTests/StoreKitLocalTests test
 ```
 
-**Znany blocker tego hosta:** test integracyjny StoreKit nie przechodzi. `storekitagent` odrzuca zapis konfiguracji: `it.patryk.plnflr is not entitled for OctaneSaveConfigurationRequest` / `SKInternalErrorDomain Code=3`; `Product.products` zwraca pustą ofertę. Na hoście nie ma tożsamości podpisujących Apple Development. Nie obchodzimy tego prywatnymi entitlementami ani fikcyjnym odblokowaniem Pro. Test pozostaje czerwony, nie jest skipowany. Testy jednostkowe ścieżek sukces/anulowanie/pending/restore/revocation przechodzą niezależnie od StoreKit hosta. Potrzebna dalsza weryfikacja uruchomienia sklepu przez Xcode / prawidłowo skonfigurowane środowisko Apple.
+**Warunek kontroli StoreKit:** `StoreKitLocalTests` wymaga działającego lokalnego sklepu przez Xcode i poprawnego środowiska Apple. Błąd `it.patryk.plnflr is not entitled for OctaneSaveConfigurationRequest` / `SKInternalErrorDomain Code=3` oraz pusta oferta `Product.products` blokują weryfikację zakupów. Nie obchodzimy błędu prywatnymi entitlementami, fikcyjnym odblokowaniem Pro ani pomijaniem testu. Testy jednostkowe sukces/anulowanie/pending/restore/revocation nie zastępują kontroli adaptera StoreKit.
 
-Brak zainstalowanych runtime'ów iOS Simulator na hoście: kompilacja dla iOS Simulator jest sprawdzona, uruchomienie na iPhonie/iPadzie jeszcze nie. Renderowanie w testach jest offscreen; nie zastępuje interaktywnego QA i niektóre systemowe kontrolki mogą nie być widoczne w bitmapie. PNG trafiają do `/tmp/plnflr-local-previews` i załączników xcresult.
+Uruchomienie na iOS Simulator wymaga zainstalowanego runtime'u; sama kompilacja nie potwierdza działania na iPhonie/iPadzie. Renderowanie w testach jest offscreen; nie zastępuje interaktywnego QA i niektóre systemowe kontrolki mogą nie być widoczne w bitmapie. PNG trafiają do `/tmp/plnflr-local-previews` i załączników xcresult.
 
 ## Projekt Xcode
 
