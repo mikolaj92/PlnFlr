@@ -99,13 +99,15 @@ public struct FurnitureItem: Codable, Equatable, Sendable, Identifiable {
     public var origin: ScenePoint
     public var state: RecordState
     public var hidden: Bool
-    public init(id: UUID, name: String, size: ScenePoint, origin: ScenePoint, state: RecordState, hidden: Bool = false) {
+    public var provenance: String?
+    public init(id: UUID, name: String, size: ScenePoint, origin: ScenePoint, state: RecordState, hidden: Bool = false, provenance: String? = nil) {
         self.id = id
         self.name = name
         self.size = size
         self.origin = origin
         self.state = state
         self.hidden = hidden
+        self.provenance = provenance
     }
 }
 

@@ -460,7 +460,7 @@ private struct ScanSceneView: View {
                         Text(item.name).font(.headline)
                         Text("Wymiary: \(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm")
                         Text(item.state == .existing ? "Stan: istniejący" : "Stan: planowany")
-                        Text("Pochodzenie: niezapisane w modelu")
+                        Text("Pochodzenie: \(item.provenance ?? "niezapisane w modelu")")
                     }
                 }
             }
