@@ -18,6 +18,20 @@ public enum FloorFinish: String, Codable, Equatable, Sendable {
     }
 }
 
+enum FloorSelectionError: LocalizedError {
+    case empty
+    case duplicate
+    case missing
+
+    var errorDescription: String? {
+        switch self {
+        case .empty: "Wybierz co najmniej jedną powierzchnię do obliczenia."
+        case .duplicate: "Zakres zawiera powtórzoną powierzchnię. Wybierz powierzchnie ponownie."
+        case .missing: "Wybrana powierzchnia już nie istnieje. Wybierz zakres ponownie."
+        }
+    }
+}
+
 extension Workspace.Floor.State {
     mutating func copyMaterial(from other: Self) {
         material = other.material
