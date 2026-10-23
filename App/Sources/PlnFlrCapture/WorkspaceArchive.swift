@@ -5,7 +5,7 @@ import PlnFlrLayout
 /// Durable inputs only. Plans are derived; App Store entitlements never come from this file.
 public struct WorkspaceArchive: Codable, Equatable, Sendable {
     public var freeRoomID: UUID?
-    public var version = 1
+    public var version = 2
     public var projects: [ProjectRecord]
     public var selectedProjectID: UUID?
 
@@ -13,6 +13,32 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         freeRoomID = state.freeRoomID
         projects = state.projects.map(ProjectRecord.init)
         selectedProjectID = state.selectedProjectID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case freeRoomID, version, projects, selectedProjectID
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        guard (1...2).contains(version) else { throw ArchiveError.unsupportedVersion }
+        freeRoomID = try values.decodeIfPresent(UUID.self, forKey: .freeRoomID)
+        selectedProjectID = try values.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
+        var records = try values.nestedUnkeyedContainer(forKey: .projects)
+        projects = []
+        while !records.isAtEnd {
+            projects.append(try ProjectRecord(from: records.superDecoder(), version: version))
+        }
+        try validate()
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(version == 1 ? 2 : version, forKey: .version)
+        try values.encodeIfPresent(freeRoomID, forKey: .freeRoomID)
+        try values.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
+        try values.encode(projects, forKey: .projects)
     }
 
     public var state: Workspace.State {
@@ -39,6 +65,9 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
         var parts: [ModelPart]
+        var rooms: [ProjectRoom]
+        var storeys: [ProjectStorey]
+        var planningScope: PlanningScope?
 
         init(_ state: Workspace.Project.State) {
             id = state.id
@@ -58,13 +87,44 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             utilities = state.utilities
             furniture = state.furniture
             parts = state.parts
+            rooms = state.rooms
+            storeys = state.storeys
+            planningScope = state.planningScope
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+            case rooms, storeys, planningScope, id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(id, forKey: .id)
+            try values.encode(name, forKey: .name)
+            try values.encode(scans, forKey: .scans)
+            try values.encode(floors, forKey: .floors)
+            try values.encode(selectedFloorIDs, forKey: .selectedFloorIDs)
+            try values.encode(splitAtM, forKey: .splitAtM)
+            try values.encode(splitAxis, forKey: .splitAxis)
+            try values.encode(geometryCorrections, forKey: .geometryCorrections)
+            try values.encode(undoneGeometryCorrectionIDs, forKey: .undoneGeometryCorrectionIDs)
+            try values.encode(scanPlacements, forKey: .scanPlacements)
+            try values.encode(undoneScanPlacementIDs, forKey: .undoneScanPlacementIDs)
+            try values.encode(floorVariants, forKey: .floorVariants)
+            try values.encode(undoneFloorVariantIDs, forKey: .undoneFloorVariantIDs)
+            try values.encode(walls, forKey: .walls)
+            try values.encode(utilities, forKey: .utilities)
+            try values.encode(furniture, forKey: .furniture)
+            try values.encode(parts, forKey: .parts)
+            try values.encode(rooms, forKey: .rooms)
+            try values.encode(storeys, forKey: .storeys)
+            try values.encode(planningScope, forKey: .planningScope)
         }
 
         public init(from decoder: Decoder) throws {
+            try self.init(from: decoder, version: 2)
+        }
+
+        init(from decoder: Decoder, version: Int) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decode(UUID.self, forKey: .id)
             name = try container.decode(String.self, forKey: .name)
@@ -83,6 +143,40 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
+            if version == 2 {
+                rooms = try container.decode([ProjectRoom].self, forKey: .rooms)
+                storeys = try container.decode([ProjectStorey].self, forKey: .storeys)
+                guard container.contains(.planningScope) else { throw MaterialInputError.invalid }
+                planningScope = try container.decodeIfPresent(PlanningScope.self, forKey: .planningScope)
+            } else {
+                guard !container.contains(.rooms), !container.contains(.storeys),
+                      !container.contains(.planningScope), floors.allSatisfy({ $0.roomID == nil }),
+                      (geometryCorrections.flatMap { $0.before + $0.after } + floorVariants.flatMap { ($0.before ?? []) + ($0.inputs ?? []) }).allSatisfy({ $0.roomID == nil }) else {
+                    throw MaterialInputError.invalid
+                }
+                rooms = []
+                storeys = []
+                planningScope = nil
+                for index in floors.indices { floors[index].roomID = floors[index].accessID }
+                func migrated(_ snapshots: [FloorSnapshot]) -> [FloorSnapshot] {
+                    snapshots.map { snapshot in
+                        var snapshot = snapshot
+                        snapshot.roomID = snapshot.accessID
+                        return snapshot
+                    }
+                }
+                geometryCorrections = geometryCorrections.map {
+                    GeometryCorrection(id: $0.id, operation: $0.operation, before: migrated($0.before), after: migrated($0.after))
+                }
+                for index in floorVariants.indices {
+                    floorVariants[index].before = floorVariants[index].before.map(migrated)
+                    floorVariants[index].inputs = floorVariants[index].inputs.map(migrated)
+                }
+                let snapshots = floors.map { FloorSnapshot($0.state) } + geometryCorrections.flatMap { $0.before + $0.after } + floorVariants.flatMap { ($0.before ?? []) + ($0.inputs ?? []) }
+                for snapshot in snapshots where !rooms.contains(where: { $0.id == snapshot.roomID }) {
+                    rooms.append(ProjectRoom(id: snapshot.roomID!, name: snapshot.name))
+                }
+            }
         }
 
         var state: Workspace.Project.State {
@@ -92,7 +186,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+                  walls: walls, utilities: utilities, furniture: furniture, parts: parts,
+                  rooms: rooms, storeys: storeys, planningScope: planningScope)
         }
     }
 
@@ -132,6 +227,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
     }
 
     public struct FloorRecord: Codable, Equatable, Sendable {
+        var roomID: UUID?
         var material: FloorMaterial
         var packSize: String
         var groutMm: String
@@ -148,6 +244,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var plankWidthM: String
 
         init(_ state: Workspace.Floor.State) {
+            roomID = state.roomID
             material = state.material
             packSize = state.packSize
             groutMm = state.groutMm
@@ -167,6 +264,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var state: Workspace.Floor.State {
             var state = Workspace.Floor.State(id: id, name: name, room: room, thresholds: thresholds, windows: windows,
                   expansionMm: expansionMm, plankLengthM: plankLengthM, plankWidthM: plankWidthM, accessID: accessID)
+            state.roomID = roomID ?? accessID
             state.storey = storey
             state.material = material
             state.packSize = packSize
@@ -191,8 +289,43 @@ public struct WorkspaceStorage: Sendable {
             return WorkspaceArchive(Workspace.State())
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
-        guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
-        for project in archive.projects {
+        try archive.validate()
+        return archive
+    }
+
+    public func save(_ archive: WorkspaceArchive) throws {
+        if (1...2).contains(archive.version) { try archive.validate() }
+        let data = try JSONEncoder().encode(archive)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+}
+
+extension WorkspaceArchive {
+    func validate() throws {
+        guard (1...2).contains(version) else { throw ArchiveError.unsupportedVersion }
+        guard Set(projects.map(\.id)).count == projects.count else { throw MaterialInputError.invalid }
+        for project in projects {
+            let roomIDs = Set(project.rooms.map(\.id))
+            let storeyIDs = Set(project.storeys.map(\.id))
+            guard roomIDs.count == project.rooms.count, storeyIDs.count == project.storeys.count,
+                  project.rooms.allSatisfy({ $0.storeyID.map(storeyIDs.contains) ?? true }),
+                  project.floors.allSatisfy({ $0.roomID.map(roomIDs.contains) ?? false }) else { throw MaterialInputError.invalid }
+            switch project.planningScope {
+            case .room(let id): guard roomIDs.contains(id) else { throw MaterialInputError.invalid }
+            case .storey(let id): guard storeyIDs.contains(id) else { throw MaterialInputError.invalid }
+            case .house, nil: break
+            }
+            let groups = project.geometryCorrections.flatMap { [$0.before, $0.after] } + project.floorVariants.flatMap { [$0.before ?? [], $0.inputs ?? []] }
+            guard Set(project.geometryCorrections.map(\.id)).count == project.geometryCorrections.count,
+                  Set(project.floorVariants.map(\.id)).count == project.floorVariants.count else { throw MaterialInputError.invalid }
+            for snapshots in groups {
+                guard Set(snapshots.map(\.id)).count == snapshots.count,
+                      snapshots.allSatisfy({ $0.roomID.map(roomIDs.contains) ?? false }) else { throw MaterialInputError.invalid }
+                for snapshot in snapshots {
+                    try validateRoom(outer: snapshot.room.outer.vertices, holes: snapshot.room.holes.map(\.vertices))
+                }
+            }
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
@@ -215,13 +348,6 @@ public struct WorkspaceStorage: Sendable {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
         }
-        return archive
-    }
-
-    public func save(_ archive: WorkspaceArchive) throws {
-        let data = try JSONEncoder().encode(archive)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
     }
 }
 
