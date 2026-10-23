@@ -161,6 +161,13 @@ public struct ScanPlacement: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+public struct FurnitureChange: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var before: FurnitureItem
+    public var after: FurnitureItem
+    public var undone = false
+}
+
 public struct ModelPart: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var name: String
@@ -365,6 +372,13 @@ public struct Workspace {
             public var utilities: [UtilityRoute]
             public var utilityError: String?
             public var furniture: [FurnitureItem]
+            public var furnitureChanges: [FurnitureChange]
+
+            public var undoableFurnitureChange: FurnitureChange? {
+                guard let change = furnitureChanges.last(where: { !$0.undone }),
+                      furniture.contains(change.after) else { return nil }
+                return change
+            }
             public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
@@ -392,6 +406,7 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
+                furnitureChanges: [FurnitureChange] = [],
                 parts: [ModelPart] = []
             ) {
                 self.error = error
@@ -405,6 +420,7 @@ public struct Workspace {
                 self.walls = walls
                 self.utilities = utilities
                 self.furniture = furniture
+                self.furnitureChanges = furnitureChanges
                 self.parts = parts
                 self.name = name
                 self.projectID = id
@@ -424,6 +440,9 @@ public struct Workspace {
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
             case saveUtility(UtilityRouteDraft)
+            case moveFurnitureButtonTapped(UUID, ScenePoint)
+            case furnitureVisibilityButtonTapped(UUID, Bool)
+            case undoFurnitureButtonTapped
             case undoLastPartButtonTapped
         }
 
@@ -450,6 +469,24 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
+                case .moveFurnitureButtonTapped(let id, let origin):
+                    guard let index = state.furniture.firstIndex(where: { $0.id == id }) else { return }
+                    let before = state.furniture[index]
+                    guard before.origin != origin else { return }
+                    state.furniture[index].origin = origin
+                    state.furnitureChanges.append(FurnitureChange(id: uuid(), before: before, after: state.furniture[index]))
+                case .furnitureVisibilityButtonTapped(let id, let hidden):
+                    guard let index = state.furniture.firstIndex(where: { $0.id == id }) else { return }
+                    let before = state.furniture[index]
+                    guard before.hidden != hidden else { return }
+                    state.furniture[index].hidden = hidden
+                    state.furnitureChanges.append(FurnitureChange(id: uuid(), before: before, after: state.furniture[index]))
+                case .undoFurnitureButtonTapped:
+                    guard let change = state.undoableFurnitureChange,
+                          let index = state.furniture.firstIndex(where: { $0.id == change.after.id }),
+                          let historyIndex = state.furnitureChanges.firstIndex(where: { $0.id == change.id }) else { return }
+                    state.furniture[index] = change.before
+                    state.furnitureChanges[historyIndex].undone = true
                 case .saveUtility(let draft):
                     do {
                         let route = try draft.validatedRoute(id: draft.routeID ?? uuid())
