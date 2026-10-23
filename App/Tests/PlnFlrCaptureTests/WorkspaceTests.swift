@@ -18,12 +18,12 @@ import Testing
 }
 
 @Test func importUsdzAddsScanAndWorkingFloors() async throws {
-    let captured = try roomFromUsdz(twoFloorUsdz())
+    let sourceUsdz = twoFloorUsdz()
+    let captured = try roomFromUsdz(sourceUsdz)
     let projectID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let scanID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
     let salonID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
     let bedID = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
-    let sourceUsdz = twoFloorUsdz()
     let store = await TestStoreActor(initialState: Workspace.State()) {
         Workspace()
     }
@@ -86,8 +86,8 @@ import Testing
         Workspace().environment(\.workspaceFiles, WorkspaceFiles(load: { try storage.load() }, save: { try storage.save($0) }))
     }
     let (left, right) = try splitRoom(room, axis: .x, atMm: 1500)
-    let first = Workspace.Floor.State(id: leftID, name: "Salon A", room: left!, accessID: originalID, roomID: WorkspaceRoom.legacyID(originalID))
-    let second = Workspace.Floor.State(id: rightID, name: "Salon B", room: right!, accessID: originalID, roomID: WorkspaceRoom.legacyID(originalID))
+    let first = Workspace.Floor.State(id: leftID, name: "Salon A", room: left!, accessID: originalID)
+    let second = Workspace.Floor.State(id: rightID, name: "Salon B", room: right!, accessID: originalID)
     let expectedCorrection = GeometryCorrection(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
         operation: .split(axis: .x, atMm: 1500),
@@ -161,8 +161,8 @@ import Testing
     }
     let (left, right) = try splitRoom(room, axis: .x, atMm: 1500)
     let original = Workspace.Floor.State(id: originalID, name: "Salon", room: room)
-    let first = Workspace.Floor.State(id: leftID, name: "Salon A", room: left!, accessID: originalID, roomID: original.roomID)
-    let second = Workspace.Floor.State(id: rightID, name: "Salon B", room: right!, accessID: originalID, roomID: original.roomID)
+    let first = Workspace.Floor.State(id: leftID, name: "Salon A", room: left!, accessID: originalID)
+    let second = Workspace.Floor.State(id: rightID, name: "Salon B", room: right!, accessID: originalID)
     let correction = GeometryCorrection(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, operation: .split(axis: .x, atMm: 1500), before: [FloorSnapshot(original)], after: [FloorSnapshot(first), FloorSnapshot(second)])
     await store.send(.splitSelectedButtonTapped) {
         $0.projects[0].floors = [snap(first), snap(second)]
@@ -184,21 +184,21 @@ import Testing
     let projectID = UUID(uuidString: "00000000-0000-0000-0000-000000000012")!
     let joinedID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let joinedRoom = try joinRooms(left, right)
-    var expectedJoined = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: leftID, roomID: WorkspaceRoom.legacyID(leftID))
+    var expectedJoined = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: joinedID)
     expectedJoined.copyMaterial(from: Workspace.Floor.State(id: leftID, name: "Salon A", room: left, accessID: leftID))
     let expectedCorrection = GeometryCorrection(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
         operation: .join,
         before: [
             FloorSnapshot(Workspace.Floor.State(id: leftID, name: "Salon A", room: left, accessID: leftID)),
-            FloorSnapshot(Workspace.Floor.State(id: rightID, name: "Salon B", room: right, accessID: leftID, roomID: WorkspaceRoom.legacyID(leftID))),
+            FloorSnapshot(Workspace.Floor.State(id: rightID, name: "Salon B", room: right, accessID: rightID)),
         ],
         after: [FloorSnapshot(expectedJoined)]
     )
     var state = Workspace.State(
         projects: [.init(id: projectID, name: "Dom", floors: [
             .init(id: leftID, name: "Salon A", room: left, accessID: leftID),
-            .init(id: rightID, name: "Salon B", room: right, accessID: leftID, roomID: WorkspaceRoom.legacyID(leftID)),
+            .init(id: rightID, name: "Salon B", room: right, accessID: rightID),
         ], selectedFloorIDs: [leftID, rightID])],
         selectedProjectID: projectID
     )
@@ -208,7 +208,7 @@ import Testing
     }
 
     await store.send(.joinSelectedButtonTapped) {
-        var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: leftID, roomID: WorkspaceRoom.legacyID(leftID))
+        var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joinedRoom, accessID: joinedID)
         let originalFloor = Workspace.Floor.State(id: leftID, name: "Salon A", room: left, accessID: leftID)
         joinedFloor.copyMaterial(from: originalFloor)
         $0.projects[0].floors = [snap(joinedFloor)]
@@ -239,13 +239,13 @@ import Testing
     let joinedID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let project = Workspace.Project.State(id: projectID, name: "Projekt 1", floors: [
         Workspace.Floor.State(id: leftID, name: "Salon A", room: left),
-        Workspace.Floor.State(id: rightID, name: "Salon B", room: right, accessID: leftID, roomID: WorkspaceRoom.legacyID(leftID)),
+        Workspace.Floor.State(id: rightID, name: "Salon B", room: right),
     ], selectedFloorIDs: [leftID, rightID])
     let store = await TestStoreActor(initialState: Workspace.State(projects: [project], selectedProjectID: projectID)) {
         Workspace()
     }
     let joined = try joinRooms(left, right)
-    var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joined, accessID: leftID, roomID: WorkspaceRoom.legacyID(leftID))
+    var joinedFloor = Workspace.Floor.State(id: joinedID, name: "Salon A", room: joined)
     joinedFloor.copyMaterial(from: project.floors[0])
     let correction = GeometryCorrection(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, operation: .join, before: project.floors.map(FloorSnapshot.init), after: [FloorSnapshot(joinedFloor)])
     await store.send(.joinSelectedButtonTapped) {
@@ -383,12 +383,12 @@ private func zipData(_ files: [String: Data]) -> Data {
         try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try! data.write(to: url)
     }
-    let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     task.currentDirectoryURL = dir
-    task.arguments = ["-r", "-q", zipURL.path, "."]
+    task.arguments = ["-r", "-q", dir.appendingPathExtension("zip").path, "."]
     try! task.run()
     task.waitUntilExit()
-    return try! Data(contentsOf: zipURL)
+    precondition(task.terminationReason == .exit && task.terminationStatus == 0)
+    return try! Data(contentsOf: dir.appendingPathExtension("zip"))
 }

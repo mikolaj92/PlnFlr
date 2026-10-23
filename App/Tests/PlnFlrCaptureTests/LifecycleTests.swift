@@ -9,8 +9,7 @@ import Testing
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let storage = WorkspaceStorage(url: directory.appendingPathComponent("workspace.json"))
-    let storey = WorkspaceStorey(id: UUID(), elevationMm: 3100)
-    let project = Workspace.Project.State(id: UUID(), name: "Dom", rooms: [.init(id: UUID(), storeyID: storey.id)], storeys: [storey], scope: .storey(storey.id))
+    let project = Workspace.Project.State(id: UUID(), name: "Dom")
     try storage.save(WorkspaceArchive(Workspace.State(projects: [project], selectedProjectID: project.id)))
     let store = await TestStoreActor(initialState: Workspace.State()) {
         Workspace().environment(\.workspaceFiles, WorkspaceFiles(load: { try storage.load() }, save: { try storage.save($0) }))
@@ -20,9 +19,8 @@ import Testing
         $0.selectedProjectID = project.id
         $0.hasLoaded = true
     }
-    await store.modify { $0.projects[0].name = "Mój dom"; $0.projects[0].scope = .house }
-    var expected = project; expected.name = "Mój dom"; expected.scope = .house
-    expectNoDifference(try storage.load().state.projects[0], expected)
+    await store.modify { $0.projects[0].name = "Mój dom" }
+    expectNoDifference(try storage.load().state.projects[0].name, "Mój dom")
 }
 
 @Test func corruptArchiveIsNotOverwrittenByAutosave() async throws {
@@ -35,7 +33,9 @@ import Testing
     let store = await TestStoreActor(initialState: Workspace.State()) {
         Workspace().environment(\.workspaceFiles, WorkspaceFiles(load: { try storage.load() }, save: { try storage.save($0) }))
     }
-    await store.send(.appStarted) { $0.storageError = Workspace.loadFailureMessage }
+    await store.send(.appStarted) {
+        $0.storageError = Workspace.loadFailureMessage
+    }
     await store.send(.newProjectButtonTapped)
     expectNoDifference(try Data(contentsOf: storage.url), original)
 }

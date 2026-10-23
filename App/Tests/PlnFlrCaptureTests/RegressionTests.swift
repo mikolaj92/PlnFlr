@@ -19,9 +19,9 @@ import Testing
     defer { try? FileManager.default.removeItem(at: directory) }
     let files = WorkspaceStorage(url: directory.appendingPathComponent("workspace.json"))
     #expect(try files.load().projects.isEmpty)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    var future = WorkspaceArchive(Workspace.State()); future.version = 999
-    try JSONEncoder().encode(future).write(to: files.url)
+    var future = WorkspaceArchive(Workspace.State())
+    future.version = 999
+    try files.save(future)
     #expect(throws: ArchiveError.self) { try files.load() }
 }
 
@@ -35,7 +35,7 @@ import Testing
     state.freeRoomID = floor.id
     let store = await TestStoreActor(initialState: state) { Workspace() }
     let parts = try splitRoom(floor.room, axis: .x, atMm: 1500)
-    var first = Workspace.Floor.State(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Salon A", room: parts.0!, plankWidthM: "0.200", accessID: floor.id, roomID: floor.roomID)
+    var first = Workspace.Floor.State(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Salon A", room: parts.0!, plankWidthM: "0.200", accessID: floor.id)
     first.material = .tile
     first.groutMm = "2"
     first.packSize = "4"
