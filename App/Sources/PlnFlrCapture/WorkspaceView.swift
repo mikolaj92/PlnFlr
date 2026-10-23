@@ -110,11 +110,6 @@ public struct WorkspaceView: View {
                         .id(project.projectID)
                     if !project.scans.isEmpty || !project.furniture.isEmpty {
                         ScanSceneView(scans: project.scans, furniture: project.furniture)
-                        FurnitureControlsView(store: projectStore, storageError: store.storageError) {
-                            store.send(.retrySaveButtonTapped)
-                        }
-                    }
-                    if !project.scans.isEmpty {
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
@@ -205,90 +200,6 @@ private struct ProjectHeaderView: View {
         TextField("Nazwa projektu", text: $store.name)
             .font(.title.bold())
             .accessibilityIdentifier("projectName")
-    }
-}
-
-private struct FurnitureControlsView: View {
-    var store: StoreOf<Workspace.Project>
-    var storageError: String?
-    var retrySave: () -> Void
-
-    var body: some View {
-        DisclosureGroup("Meble") {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(store.furniture.filter { !$0.hidden }) { item in
-                    FurniturePositionView(item: item,
-                        manuallyChanged: store.furnitureChanges.contains { !$0.undone && $0.after.id == item.id },
-                        move: { store.send(.moveFurnitureButtonTapped(item.id, $0)) },
-                        hide: { store.send(.furnitureVisibilityButtonTapped(item.id, true)) })
-                }
-                DisclosureGroup("Ukryte meble") {
-                    ForEach(store.furniture.filter(\.hidden)) { item in
-                        Button("Przywróć: \(item.name)") {
-                            store.send(.furnitureVisibilityButtonTapped(item.id, false))
-                        }
-                    }
-                }
-                Button("Cofnij ostatnią zmianę mebla") { store.send(.undoFurnitureButtonTapped) }
-                    .disabled(store.undoableFurnitureChange == nil)
-                if let storageError {
-                    Label(storageError, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                    Text("Zmiany mebli pozostają w pamięci. Ponów zapis przed zamknięciem aplikacji.")
-                    Button("Ponów zapis zmian mebli", action: retrySave)
-                }
-            }
-        }
-    }
-}
-
-private struct FurniturePositionView: View {
-    var item: FurnitureItem
-    var manuallyChanged: Bool
-    var move: (ScenePoint) -> Void
-    var hide: () -> Void
-    @State private var x = ""
-    @State private var y = ""
-    @State private var z = ""
-    @State private var error: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(item.name).font(.headline)
-            Text("Stan: \(item.state.label)")
-            if manuallyChanged {
-                Text("Pochodzenie zmiany: ręczna korekta")
-            }
-            field("X (mm)", text: $x)
-            field("Y (mm)", text: $y)
-            field("Z (mm)", text: $z)
-            Button("Przesuń: \(item.name)") {
-                guard let x = Int(x), let y = Int(y), let z = Int(z) else {
-                    error = "Podaj X, Y i Z jako całkowite milimetry."
-                    return
-                }
-                error = nil
-                move(ScenePoint(xMm: x, yMm: y, zMm: z))
-            }
-            Button("Ukryj: \(item.name)", action: hide)
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-            }
-        }
-        .onChange(of: item.origin, initial: true) { _, origin in
-            x = String(origin.xMm)
-            y = String(origin.yMm)
-            z = String(origin.zMm)
-        }
-    }
-
-    private func field(_ title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading) {
-            Text(title)
-            TextField(title, text: text)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("\(item.name): \(title)")
-        }
     }
 }
 
@@ -494,8 +405,8 @@ private struct UtilityRouteEditor: View {
 
 private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
-    var furniture: [FurnitureItem] = []
     var selection: [String]? = nil
+    var furniture: [FurnitureItem] = []
     var title = "Wspólna mapa skanów 3D"
     var allowsWallAppearance = false
     @State private var scene: SCNScene?
@@ -542,6 +453,16 @@ private struct ScanSceneView: View {
             #endif
             ForEach(Array(errors.enumerated()), id: \.offset) { _, message in
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+            ForEach(furniture) { item in
+                if !item.hidden {
+                    VStack(alignment: .leading) {
+                        Text(item.name).font(.headline)
+                        Text("Wymiary: \(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm")
+                        Text(item.state == .existing ? "Stan: istniejący" : "Stan: planowany")
+                        Text("Pochodzenie: \(item.provenance ?? "niezapisane w modelu")")
+                    }
+                }
             }
             Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
                 .font(.caption).foregroundStyle(.secondary)
