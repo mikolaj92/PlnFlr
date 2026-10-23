@@ -365,6 +365,8 @@ public struct Workspace {
             public var utilities: [UtilityRoute]
             public var utilityError: String?
             public var furniture: [FurnitureItem]
+            public var furnitureChanges: [FurnitureChange]
+            public var undoneFurnitureChangeIDs: [UUID]
             public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
@@ -392,6 +394,8 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
+                furnitureChanges: [FurnitureChange] = [],
+                undoneFurnitureChangeIDs: [UUID] = [],
                 parts: [ModelPart] = []
             ) {
                 self.error = error
@@ -405,6 +409,8 @@ public struct Workspace {
                 self.walls = walls
                 self.utilities = utilities
                 self.furniture = furniture
+                self.furnitureChanges = furnitureChanges
+                self.undoneFurnitureChangeIDs = undoneFurnitureChangeIDs
                 self.parts = parts
                 self.name = name
                 self.projectID = id
@@ -424,6 +430,10 @@ public struct Workspace {
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
             case saveUtility(UtilityRouteDraft)
+            case addFurniture(FurnitureItem)
+            case moveFurniture(UUID, ScenePoint, Int, String)
+            case setFurnitureHidden(UUID, Bool, String)
+            case undoLastFurnitureChange
             case undoLastPartButtonTapped
         }
 
@@ -450,6 +460,23 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
+                case .addFurniture, .moveFurniture, .setFurnitureHidden, .undoLastFurnitureChange:
+                    do {
+                        switch action {
+                        case .addFurniture(let item):
+                            try state.addFurniture(item, changeID: uuid())
+                        case .moveFurniture(let id, let origin, let rotation, let provenance):
+                            try state.moveFurniture(id, to: origin, rotationDegreesAroundPositiveZ: rotation, provenance: provenance, changeID: uuid())
+                        case .setFurnitureHidden(let id, let hidden, let provenance):
+                            try state.setFurnitureHidden(id, hidden: hidden, provenance: provenance, changeID: uuid())
+                        case .undoLastFurnitureChange:
+                            state.undoLastFurnitureChange()
+                        default: break
+                        }
+                        state.error = nil
+                    } catch {
+                        state.error = error.localizedDescription
+                    }
                 case .saveUtility(let draft):
                     do {
                         let route = try draft.validatedRoute(id: draft.routeID ?? uuid())

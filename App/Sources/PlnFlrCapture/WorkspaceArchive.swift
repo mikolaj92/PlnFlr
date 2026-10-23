@@ -38,6 +38,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var walls: [WallSegment]
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
+        var furnitureChanges: [FurnitureChange]
+        var undoneFurnitureChangeIDs: [UUID]
         var parts: [ModelPart]
 
         init(_ state: Workspace.Project.State) {
@@ -57,11 +59,13 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = state.walls
             utilities = state.utilities
             furniture = state.furniture
+            furnitureChanges = state.furnitureChanges
+            undoneFurnitureChangeIDs = state.undoneFurnitureChangeIDs
             parts = state.parts
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, furnitureChanges, undoneFurnitureChangeIDs, parts
         }
 
         public init(from decoder: Decoder) throws {
@@ -82,6 +86,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = try container.decodeIfPresent([WallSegment].self, forKey: .walls) ?? []
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
+            furnitureChanges = try container.decodeIfPresent([FurnitureChange].self, forKey: .furnitureChanges) ?? []
+            undoneFurnitureChangeIDs = try container.decodeIfPresent([UUID].self, forKey: .undoneFurnitureChangeIDs) ?? []
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
         }
 
@@ -92,7 +98,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+                  walls: walls, utilities: utilities, furniture: furniture,
+                  furnitureChanges: furnitureChanges, undoneFurnitureChangeIDs: undoneFurnitureChangeIDs, parts: parts)
         }
     }
 
@@ -191,8 +198,15 @@ public struct WorkspaceStorage: Sendable {
             return WorkspaceArchive(Workspace.State())
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
+        try validate(archive)
+        return archive
+    }
+
+    private func validate(_ archive: WorkspaceArchive) throws {
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
+        guard Set(archive.projects.map(\.id)).count == archive.projects.count else { throw MaterialInputError.invalid }
         for project in archive.projects {
+            try project.state.validateFurniture()
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
@@ -215,10 +229,13 @@ public struct WorkspaceStorage: Sendable {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
         }
-        return archive
     }
 
     public func save(_ archive: WorkspaceArchive) throws {
+        try validate(archive)
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try load()
+        }
         let data = try JSONEncoder().encode(archive)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
