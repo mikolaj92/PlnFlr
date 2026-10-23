@@ -10,7 +10,7 @@ import Testing
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let storage = WorkspaceStorage(url: directory.appendingPathComponent("workspace.json"))
-    let sourceUsdz = try twoFloorUsdz()
+    let sourceUsdz = twoFloorUsdz()
     let structure = Data("room-plan-structure".utf8)
     let projectID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     let scanID = UUID(uuidString: "00000000-0000-0000-0000-000000000011")!
@@ -184,7 +184,7 @@ import Testing
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let storage = WorkspaceStorage(url: directory.appendingPathComponent("workspace.json"))
-    let importedSource = try twoFloorUsdz()
+    let importedSource = twoFloorUsdz()
     let cameraSource = RoomPlanStructureSource(
         rooms: [Data("camera-room-source".utf8)],
         structure: Data("camera-structure-source".utf8)
