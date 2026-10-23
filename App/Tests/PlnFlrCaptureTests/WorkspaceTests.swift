@@ -384,9 +384,8 @@ private func zipData(_ files: [String: Data]) -> Data {
         try! data.write(to: url)
     }
     let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    task.currentDirectoryURL = dir
-    task.arguments = ["-r", "-q", dir.appendingPathExtension("zip").path, "."]
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+    task.arguments = ["-c", "-k", dir.path, dir.appendingPathExtension("zip").path]
     try! task.run()
     task.waitUntilExit()
     precondition(task.terminationReason == .exit && task.terminationStatus == 0)
