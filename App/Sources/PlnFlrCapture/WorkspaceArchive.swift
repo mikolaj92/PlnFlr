@@ -38,6 +38,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var walls: [WallSegment]
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
+        var furnitureChanges: [FurnitureChange]
+        var undoneFurnitureChangeIDs: [UUID]
         var parts: [ModelPart]
 
         init(_ state: Workspace.Project.State) {
@@ -57,11 +59,13 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = state.walls
             utilities = state.utilities
             furniture = state.furniture
+            furnitureChanges = state.furnitureChanges
+            undoneFurnitureChangeIDs = state.undoneFurnitureChangeIDs
             parts = state.parts
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, furnitureChanges, undoneFurnitureChangeIDs, parts
         }
 
         public init(from decoder: Decoder) throws {
@@ -82,6 +86,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = try container.decodeIfPresent([WallSegment].self, forKey: .walls) ?? []
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
+            furnitureChanges = try container.decodeIfPresent([FurnitureChange].self, forKey: .furnitureChanges) ?? []
+            undoneFurnitureChangeIDs = try container.decodeIfPresent([UUID].self, forKey: .undoneFurnitureChangeIDs) ?? []
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
         }
 
@@ -92,7 +98,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+                  walls: walls, utilities: utilities, furniture: furniture,
+                  furnitureChanges: furnitureChanges, undoneFurnitureChangeIDs: undoneFurnitureChangeIDs, parts: parts)
         }
     }
 

@@ -111,6 +111,18 @@ public struct FurnitureItem: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+public struct FurnitureChange: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var before: FurnitureItem
+    public var after: FurnitureItem
+
+    public init(id: UUID, before: FurnitureItem, after: FurnitureItem) {
+        self.id = id
+        self.before = before
+        self.after = after
+    }
+}
+
 public struct DrillQuery: Equatable, Sendable {
     public var origin: ScenePoint
     public var direction: ScenePoint

@@ -365,6 +365,15 @@ public struct Workspace {
             public var utilities: [UtilityRoute]
             public var utilityError: String?
             public var furniture: [FurnitureItem]
+            public var furnitureChanges: [FurnitureChange]
+            public var undoneFurnitureChangeIDs: [UUID]
+            public var furnitureError: String?
+
+            public var undoableFurnitureChange: FurnitureChange? {
+                furnitureChanges.last { change in
+                    !undoneFurnitureChangeIDs.contains(change.id) && furniture.contains(change.after)
+                }
+            }
             public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
@@ -392,6 +401,8 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
+                furnitureChanges: [FurnitureChange] = [],
+                undoneFurnitureChangeIDs: [UUID] = [],
                 parts: [ModelPart] = []
             ) {
                 self.error = error
@@ -405,6 +416,8 @@ public struct Workspace {
                 self.walls = walls
                 self.utilities = utilities
                 self.furniture = furniture
+                self.furnitureChanges = furnitureChanges
+                self.undoneFurnitureChangeIDs = undoneFurnitureChangeIDs
                 self.parts = parts
                 self.name = name
                 self.projectID = id
@@ -424,6 +437,9 @@ public struct Workspace {
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
             case saveUtility(UtilityRouteDraft)
+            case moveFurnitureButtonTapped(UUID, String, String, String)
+            case setFurnitureHiddenButtonTapped(UUID, Bool)
+            case undoFurnitureButtonTapped
             case undoLastPartButtonTapped
         }
 
@@ -450,6 +466,24 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
+                case .moveFurnitureButtonTapped(let id, let x, let y, let z):
+                    guard let x = Int(x), let y = Int(y), let z = Int(z) else {
+                        state.furnitureError = "Wpisz całkowite współrzędne X, Y i Z w milimetrach."
+                        return
+                    }
+                    guard var item = state.furniture.first(where: { $0.id == id }) else { return }
+                    item.origin = ScenePoint(xMm: x, yMm: y, zMm: z)
+                    state.changeFurniture(item, changeID: uuid())
+                case .setFurnitureHiddenButtonTapped(let id, let hidden):
+                    guard var item = state.furniture.first(where: { $0.id == id }) else { return }
+                    item.hidden = hidden
+                    state.changeFurniture(item, changeID: uuid())
+                case .undoFurnitureButtonTapped:
+                    guard let change = state.undoableFurnitureChange,
+                          let index = state.furniture.firstIndex(where: { $0.id == change.after.id }) else { return }
+                    state.furniture[index] = change.before
+                    state.undoneFurnitureChangeIDs.append(change.id)
+                    state.furnitureError = nil
                 case .saveUtility(let draft):
                     do {
                         let route = try draft.validatedRoute(id: draft.routeID ?? uuid())
@@ -961,6 +995,20 @@ public struct Workspace {
 }
 
 extension Workspace.Project.State {
+    mutating func changeFurniture(_ item: FurnitureItem, changeID: UUID) {
+        guard let index = furniture.firstIndex(where: { $0.id == item.id }) else { return }
+        let before = furniture[index]
+        guard before != item else {
+            furnitureError = nil
+            return
+        }
+        var after = item
+        after.provenance = "Ręczna zmiana · \(item.hidden ? "ukryty" : "widoczny") · X \(item.origin.xMm), Y \(item.origin.yMm), Z \(item.origin.zMm) mm"
+        furniture[index] = after
+        furnitureChanges.append(FurnitureChange(id: changeID, before: before, after: after))
+        furnitureError = nil
+    }
+
     mutating func detachPart(_ id: UUID) {
         parts.removeAll { $0.id == id }
         error = nil

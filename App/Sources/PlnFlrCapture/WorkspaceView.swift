@@ -5,6 +5,57 @@ import SceneKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct FurnitureControlsView: View {
+    let store: StoreOf<Workspace.Project>
+
+    var body: some View {
+        DisclosureGroup("Meble — widoczne i ukryte") {
+            VStack(alignment: .leading, spacing: 12) {
+                Button("Cofnij ostatnią zmianę mebla") { store.send(.undoFurnitureButtonTapped) }
+                    .disabled(store.undoableFurnitureChange == nil)
+                if let error = store.furnitureError {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+                ForEach(store.furniture) { item in
+                    FurnitureControlsRow(item: item, store: store)
+                }
+            }
+        }
+    }
+}
+
+private struct FurnitureControlsRow: View {
+    let item: FurnitureItem
+    let store: StoreOf<Workspace.Project>
+    @State private var x = ""
+    @State private var y = ""
+    @State private var z = ""
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("\(item.name) · \(item.hidden ? "Ukryty" : "Widoczny")").font(.headline)
+            Text(item.provenance ?? "Brak informacji o pochodzeniu").font(.caption)
+            TextField("X (mm)", text: $x).accessibilityLabel("\(item.name): X (mm)")
+            TextField("Y (mm)", text: $y).accessibilityLabel("\(item.name): Y (mm)")
+            TextField("Z (mm)", text: $z).accessibilityLabel("\(item.name): Z (mm)")
+            HStack {
+                Button("Przesuń") { store.send(.moveFurnitureButtonTapped(item.id, x, y, z)) }
+                    .accessibilityLabel("Przesuń: \(item.name)")
+                Button(item.hidden ? "Przywróć" : "Ukryj") {
+                    store.send(.setFurnitureHiddenButtonTapped(item.id, !item.hidden))
+                }
+                .accessibilityLabel("\(item.hidden ? "Przywróć" : "Ukryj"): \(item.name)")
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .onChange(of: item.origin, initial: true) { _, origin in
+            x = String(origin.xMm)
+            y = String(origin.yMm)
+            z = String(origin.zMm)
+        }
+    }
+}
+
 public struct WorkspaceView: View {
     @Bindable public var store: StoreOf<Workspace>
     @Environment(\.scenePhase) private var scenePhase
@@ -110,6 +161,7 @@ public struct WorkspaceView: View {
                         .id(project.projectID)
                     if !project.scans.isEmpty || !project.furniture.isEmpty {
                         ScanSceneView(scans: project.scans, furniture: project.furniture)
+                        FurnitureControlsView(store: projectStore)
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
