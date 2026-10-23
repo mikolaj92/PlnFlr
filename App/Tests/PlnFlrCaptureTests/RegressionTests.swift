@@ -19,8 +19,9 @@ import Testing
     defer { try? FileManager.default.removeItem(at: directory) }
     let files = WorkspaceStorage(url: directory.appendingPathComponent("workspace.json"))
     #expect(try files.load().projects.isEmpty)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    try Data(#"{"version":999,"projects":[]}"#.utf8).write(to: files.url)
+    var future = WorkspaceArchive(Workspace.State())
+    future.version = 999
+    try files.save(future)
     #expect(throws: ArchiveError.self) { try files.load() }
 }
 
