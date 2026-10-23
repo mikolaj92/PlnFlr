@@ -40,7 +40,7 @@ import Testing
     }
 
     let restored = try storage.load()
-    #expect(restored.version == 1)
+    #expect(restored.version == 2)
     #expect(restored.state.projects[0].scans[0].transform == placed)
     #expect(restored.state.projects[0].scans[0].sourceUsdz == sourceUsdz)
     #expect(restored.state.projects[0].scans[0].roomPlanStructure?.structure == structure)
@@ -122,7 +122,7 @@ import Testing
     }
 
     let restored = try storage.load()
-    #expect(restored.version == 1)
+    #expect(restored.version == 2)
     #expect(restored.state.projects[0].floorVariants[0].areaNetMm2 == firstPlan.bom.areaNetMm2 + secondPlan.bom.areaNetMm2)
     #expect(restored.state.projects[0].scans[0].sourceUsdz == source)
 
