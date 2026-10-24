@@ -151,7 +151,14 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             } else {
                 guard !container.contains(.rooms), !container.contains(.storeys),
                       !container.contains(.planningScope), floors.allSatisfy({ $0.roomID == nil }),
-                      (geometryCorrections.flatMap { $0.before + $0.after } + floorVariants.flatMap { ($0.before ?? []) + ($0.inputs ?? []) }).allSatisfy({ $0.roomID == nil }) else {
+                      geometryCorrections.allSatisfy({ correction in
+                          correction.before.allSatisfy { $0.roomID == nil }
+                              && correction.after.allSatisfy { $0.roomID == nil }
+                      }),
+                      floorVariants.allSatisfy({ variant in
+                          (variant.before ?? []).allSatisfy { $0.roomID == nil }
+                              && (variant.inputs ?? []).allSatisfy { $0.roomID == nil }
+                      }) else {
                     throw MaterialInputError.invalid
                 }
                 rooms = []
