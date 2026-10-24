@@ -110,6 +110,7 @@ public struct WorkspaceView: View {
                         .id(project.projectID)
                     if !project.scans.isEmpty || !project.furniture.isEmpty {
                         ScanSceneView(scans: project.scans, furniture: project.furniture)
+                        FurnitureControlsView(store: projectStore)
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
@@ -406,6 +407,70 @@ private struct UtilityRouteEditor: View {
             }
         }
         .frame(minWidth: 320, minHeight: 480)
+    }
+}
+
+private struct FurnitureControlsView: View {
+    let store: StoreOf<Workspace.Project>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Meble").font(.headline)
+            Button("Cofnij zmianę mebla") { store.send(.undoLastFurnitureChangeButtonTapped) }
+                .disabled(store.undoableFurnitureChange == nil)
+            ForEach(store.furniture.filter { !$0.hidden }) { item in
+                FurniturePositionView(item: item) { origin in
+                    store.send(.moveFurniture(item.id, origin))
+                } hide: {
+                    store.send(.setFurnitureHidden(item.id, true))
+                }
+            }
+            DisclosureGroup("Ukryte meble") {
+                ForEach(store.furniture.filter(\.hidden)) { item in
+                    VStack(alignment: .leading) {
+                        Text(item.name)
+                        Text("Pochodzenie: \(item.provenance ?? "niezapisane w modelu")")
+                        Button("Przywróć \(item.name)") { store.send(.setFurnitureHidden(item.id, false)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct FurniturePositionView: View {
+    let item: FurnitureItem
+    let move: (ScenePoint) -> Void
+    let hide: () -> Void
+    @State private var x = ""
+    @State private var y = ""
+    @State private var z = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(item.name).font(.headline)
+            TextField("Pozycja X (mm) — \(item.name)", text: $x)
+            TextField("Pozycja Y (mm) — \(item.name)", text: $y)
+            TextField("Pozycja Z (mm) — \(item.name)", text: $z)
+            Button("Przesuń \(item.name)") {
+                guard let xMm = Int(x), let yMm = Int(y), let zMm = Int(z) else {
+                    error = "Podaj pozycję jako całkowite liczby milimetrów."
+                    return
+                }
+                error = nil
+                move(ScenePoint(xMm: xMm, yMm: yMm, zMm: zMm))
+            }
+            Button("Ukryj \(item.name)", action: hide)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+        }
+        .onChange(of: item.origin, initial: true) { _, origin in
+            x = String(origin.xMm)
+            y = String(origin.yMm)
+            z = String(origin.zMm)
+        }
     }
 }
 
