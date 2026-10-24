@@ -15,8 +15,34 @@ extension Workspace.Project.State {
         }
     }
 
+    func resolvePlanningScope() throws -> [Workspace.Floor.State] {
+        guard let planningScope else { throw PlanningScopeError.unselected }
+        let ids: [UUID]
+        switch planningScope {
+        case .room(let id): ids = [id]
+        case .storey(let name): ids = floors.filter { $0.storey == name }.map(\.id)
+        case .house: ids = floors.map(\.id)
+        }
+        guard !ids.isEmpty else { throw PlanningScopeError.empty }
+        guard ids.allSatisfy({ id in floors.contains { $0.id == id } }) else {
+            throw PlanningScopeError.missing
+        }
+        return try floorsForPlanning(ids)
+    }
+
+    var planningScopeMessage: String? {
+        do {
+            _ = try resolvePlanningScope()
+            return selectedPlans == nil ? "Brak aktualnego wyniku dla zakresu. Wybierz Policz zakres." : nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     var selectedPlans: [Workspace.Floor.State]? {
-        guard let selected = try? floorsForPlanning(selectedFloorIDs),
+        guard let selected = try? resolvePlanningScope(),
+              plannedScope == planningScope,
+              plannedInputs == selected.map(FloorSnapshot.init),
               selected.allSatisfy({ $0.plan != nil }) else { return nil }
         return selected
     }
@@ -34,6 +60,10 @@ extension Workspace.State {
                 projects[p].floors[f].plan = plan
                 projects[p].floors[f].error = nil
             }
+        }
+        if let resolved = try? projects[p].resolvePlanningScope(), resolved.map(\.id) == floors.map(\.id) {
+            projects[p].plannedScope = projects[p].planningScope
+            projects[p].plannedInputs = floors.map(FloorSnapshot.init)
         }
         if !hasPro && freeRoomID == nil { freeRoomID = floors.first?.accessID }
         projects[p].error = nil

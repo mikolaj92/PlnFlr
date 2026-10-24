@@ -100,6 +100,12 @@ public struct ScanTransform: Codable, Equatable, Sendable {
     }
 }
 
+public enum PlanningScope: Codable, Equatable, Hashable, Sendable {
+    case room(UUID)
+    case storey(String)
+    case house
+}
+
 /// Sum of separate floor plans for one selection. Rooms are not unioned, so overlap is counted twice.
 public struct FloorVariant: Codable, Equatable, Sendable, Identifiable {
     public static let sumLabel = "Suma osobnych planów podłogi"
@@ -371,6 +377,9 @@ public struct Workspace {
             public var projectID: UUID
             public var scans: [Scan.State]
             public var selectedFloorIDs: [UUID]
+            public var planningScope: PlanningScope?
+            public var plannedScope: PlanningScope?
+            public var plannedInputs: [FloorSnapshot]?
             public var splitAtM: String
             public var splitAxis: SplitAxis
 
@@ -724,7 +733,7 @@ public struct Workspace {
                 guard let p = state.projects.firstIndex(where: { $0.id == projectID }),
                       state.projects[p].activeFloorVariant == nil else { return }
                 do {
-                    let floors = try state.projects[p].floorsForPlanning(state.projects[p].selectedFloorIDs)
+                    let floors = try state.projects[p].resolvePlanningScope()
                     guard state.canPlan(floors) else {
                         state.isPaywallPresented = true
                         return
@@ -749,7 +758,13 @@ public struct Workspace {
                 state.planFloors([floorID], projectID: projectID, reportProjectError: false)
             case .planSelectedFloorsButtonTapped(let projectID):
                 guard let project = state.projects.first(where: { $0.id == projectID }) else { return }
-                state.planFloors(project.selectedFloorIDs, projectID: projectID)
+                do {
+                    state.planFloors(try project.resolvePlanningScope().map(\.id), projectID: projectID)
+                } catch {
+                    if let p = state.projects.firstIndex(where: { $0.id == projectID }) {
+                        state.projects[p].error = error.localizedDescription
+                    }
+                }
             case .proAccessChanged(let hasPro):
                 state.applyProAccess(hasPro)
             case .importFailed(let message):
