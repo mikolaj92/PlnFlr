@@ -7,10 +7,9 @@ extension Workspace.Project.State {
     }
 
     func floorsForPlanning(_ ids: [UUID]) throws -> [Workspace.Floor.State] {
-        guard !ids.isEmpty else { throw FloorSelectionError.empty }
-        guard Set(ids).count == ids.count else { throw FloorSelectionError.duplicate }
+        guard !ids.isEmpty, Set(ids).count == ids.count else { throw MaterialInputError.invalid }
         return try ids.map { id in
-            guard let floor = floors.first(where: { $0.id == id }) else { throw FloorSelectionError.missing }
+            guard let floor = floors.first(where: { $0.id == id }) else { throw MaterialInputError.invalid }
             return floor
         }
     }
@@ -50,7 +49,7 @@ extension Workspace.State {
             let plans = try floors.map { try $0.makePlan() }
             commitPlans(plans, floors: floors, projectIndex: p)
         } catch {
-            if ids.count != 1 || error is FloorSelectionError { projects[p].error = error.localizedDescription }
+            if ids.count != 1 { projects[p].error = error.localizedDescription }
             for f in projects[p].floors.indices where ids.contains(projects[p].floors[f].id) {
                 projects[p].floors[f].error = error.localizedDescription
             }

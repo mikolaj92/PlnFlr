@@ -18,12 +18,12 @@ import Testing
 }
 
 @Test func importUsdzAddsScanAndWorkingFloors() async throws {
-    let captured = try roomFromUsdz(twoFloorUsdz())
+    let sourceUsdz = twoFloorUsdz()
+    let captured = try roomFromUsdz(sourceUsdz)
     let projectID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     let scanID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
     let salonID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
     let bedID = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
-    let sourceUsdz = twoFloorUsdz()
     let store = await TestStoreActor(initialState: Workspace.State()) {
         Workspace()
     }
@@ -383,12 +383,12 @@ private func zipData(_ files: [String: Data]) -> Data {
         try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try! data.write(to: url)
     }
-    let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     task.currentDirectoryURL = dir
-    task.arguments = ["-r", "-q", zipURL.path, "."]
+    task.arguments = ["-r", "-q", dir.appendingPathExtension("zip").path, "."]
     try! task.run()
     task.waitUntilExit()
-    return try! Data(contentsOf: zipURL)
+    precondition(task.terminationReason == .exit && task.terminationStatus == 0)
+    return try! Data(contentsOf: dir.appendingPathExtension("zip"))
 }
