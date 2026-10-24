@@ -1,5 +1,17 @@
 import Foundation
 
+enum PlanningScopeError: LocalizedError {
+    case unselected, empty, missing
+
+    var errorDescription: String? {
+        switch self {
+        case .unselected: "Wybierz pokój, kondygnację lub dom. Zaznaczenie geometrii nie zmienia zakresu."
+        case .empty: "Zakres nie zawiera powierzchni. Sprawdź przypisania pokoi."
+        case .missing: "Powierzchnia zakresu już nie istnieje. Wybierz zakres ponownie."
+        }
+    }
+}
+
 enum ManualRoomError: Error {
     case invalidDimensions
 }
