@@ -746,7 +746,7 @@ public struct Workspace {
                     state.projects[p].error = error.localizedDescription
                 }
             case .planFloorButtonTapped(let projectID, let floorID):
-                state.planFloors([floorID], projectID: projectID)
+                state.planFloors([floorID], projectID: projectID, reportProjectError: false)
             case .planSelectedFloorsButtonTapped(let projectID):
                 guard let project = state.projects.first(where: { $0.id == projectID }) else { return }
                 state.planFloors(project.selectedFloorIDs, projectID: projectID)
