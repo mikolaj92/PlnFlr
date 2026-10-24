@@ -198,12 +198,12 @@ public struct WorkspaceStorage: Sendable {
             return WorkspaceArchive(Workspace.State())
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
+        guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
         try validate(archive)
         return archive
     }
 
     private func validate(_ archive: WorkspaceArchive) throws {
-        guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
         guard Set(archive.projects.map(\.id)).count == archive.projects.count else { throw MaterialInputError.invalid }
         for project in archive.projects {
             try project.state.validateFurniture()
