@@ -18,8 +18,10 @@ extension Workspace.Project.State {
         guard let planningScope else { throw PlanningScopeError.unselected }
         let ids: [UUID]
         switch planningScope {
-        case .room(let id): ids = [id]
-        case .storey(let name): ids = floors.filter { $0.storey == name }.map(\.id)
+        case .room(let id): ids = floors.filter { $0.roomID == id }.map(\.id)
+        case .storey(let name):
+            let members = Set(rooms.filter { $0.storeyID == name }.map(\.id))
+            ids = floors.filter { members.contains($0.roomID) || $0.storey == name }.map(\.id)
         case .house: ids = floors.map(\.id)
         }
         guard !ids.isEmpty else { throw PlanningScopeError.empty }

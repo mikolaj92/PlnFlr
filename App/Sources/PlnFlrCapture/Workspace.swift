@@ -7,6 +7,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
     public let id: UUID
     public let name: String
     public let storey: String?
+    public var roomID: UUID?
     public let room: Room
     public let thresholds: [Threshold]
     public let windows: [Opening]
@@ -23,6 +24,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
         id = state.id
         name = state.name
         storey = state.storey
+        roomID = state.roomID
         room = state.room
         thresholds = state.thresholds
         windows = state.windows
@@ -49,6 +51,7 @@ public struct FloorSnapshot: Codable, Equatable, Sendable {
             accessID: accessID
         )
         state.storey = storey
+        state.roomID = roomID ?? id
         state.material = material
         state.packSize = packSize
         state.groutMm = groutMm
@@ -97,6 +100,30 @@ public struct ScanTransform: Codable, Equatable, Sendable {
         self.yMm = yMm
         self.zMm = zMm
         self.yawDegrees = yawDegrees
+    }
+}
+
+public struct ProjectRoom: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var storeyID: String?
+
+    public init(id: UUID, name: String, storeyID: String? = nil) {
+        self.id = id
+        self.name = name
+        self.storeyID = storeyID
+    }
+}
+
+public struct Storey: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var elevationMm: Int
+
+    public init(id: String, name: String, elevationMm: Int) {
+        self.id = id
+        self.name = name
+        self.elevationMm = elevationMm
     }
 }
 
@@ -305,6 +332,7 @@ public struct Workspace {
             public var id: UUID { floorID }
             public var name: String
             public var storey: String?
+            public var roomID: UUID
             public var plan: LayoutPlan?
             public var plankLengthM: String
             public var plankWidthM: String
@@ -323,9 +351,11 @@ public struct Workspace {
                 plankWidthM: String = "0.156",
                 plan: LayoutPlan? = nil,
                 error: String? = nil,
-                accessID: UUID? = nil
+                accessID: UUID? = nil,
+                roomID: UUID? = nil
             ) {
                 self.accessID = accessID ?? id
+                self.roomID = roomID ?? id
                 self.error = error
                 self.expansionMm = expansionMm
                 self.floorID = id
@@ -377,6 +407,8 @@ public struct Workspace {
             public var projectID: UUID
             public var scans: [Scan.State]
             public var selectedFloorIDs: [UUID]
+            public var rooms: [ProjectRoom]
+            public var storeys: [Storey]
             public var planningScope: PlanningScope?
             public var plannedScope: PlanningScope?
             public var plannedInputs: [FloorSnapshot]?
@@ -401,10 +433,20 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
-                parts: [ModelPart] = []
+                parts: [ModelPart] = [],
+                rooms: [ProjectRoom]? = nil,
+                storeys: [Storey] = [],
+                planningScope: PlanningScope? = nil
             ) {
                 self.error = error
                 self.floors = floors
+                self.rooms = rooms ?? floors.reduce(into: []) { result, floor in
+                    if !result.contains(where: { $0.id == floor.roomID }) {
+                        result.append(ProjectRoom(id: floor.roomID, name: floor.name))
+                    }
+                }
+                self.storeys = storeys
+                self.planningScope = planningScope
                 self.geometryCorrections = geometryCorrections
                 self.undoneGeometryCorrectionIDs = undoneGeometryCorrectionIDs
                 self.scanPlacements = scanPlacements
@@ -448,7 +490,7 @@ public struct Workspace {
                           !state.undoneGeometryCorrectionIDs.contains($0.id)
                       }),
                       correction.after.allSatisfy({ after in
-                          state.floors.contains(where: { $0.id == after.id })
+                          state.floors.contains(where: { FloorSnapshot($0) == after })
                       }) else { return }
                 let resultIDs = Set(correction.after.map(\.id))
                 state.floors.removeAll { resultIDs.contains($0.id) }
@@ -786,6 +828,7 @@ public struct Workspace {
                     let name = state.manualName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let floor = Floor.State(id: uuid(), name: name.isEmpty ? "Pokój" : name, room: room)
                     state.projects[index].floors.append(floor)
+                    state.projects[index].rooms.append(ProjectRoom(id: floor.roomID, name: floor.name))
                     state.projects[index].selectedFloorIDs = [floor.id]
                     state.manualRoomError = nil
                     state.isAddingRoom = false
@@ -837,6 +880,7 @@ public struct Workspace {
                         )
                         floorIDs.append(floor.floorID)
                         state.projects[index].floors.append(floor)
+                        state.projects[index].rooms.append(ProjectRoom(id: floor.roomID, name: floor.name))
                     }
                     if let first = floorIDs.first {
                         state.projects[index].selectedFloorIDs = [first]
@@ -889,6 +933,8 @@ public struct Workspace {
                     )
                     first.copyMaterial(from: original)
                     second.copyMaterial(from: original)
+                    first.roomID = original.roomID
+                    second.roomID = original.roomID
                     first.storey = original.storey
                     second.storey = original.storey
                     let correction = GeometryCorrection(
@@ -911,7 +957,15 @@ public struct Workspace {
                 let selected = state.projects[index].floors.filter { selectedIDs.contains($0.floorID) }
                 guard selected.count == 2 else { return }
                 do {
-                    let joined = try joinRooms(selected[0].room, selected[1].room)
+                    let a = selected[0]
+                    let b = selected[1]
+                    guard a.roomID == b.roomID, a.storey == b.storey, a.accessID == b.accessID,
+                          a.material == b.material, a.packSize == b.packSize, a.groutMm == b.groutMm,
+                          a.expansionMm == b.expansionMm, a.finish == b.finish,
+                          a.plankLengthM == b.plankLengthM, a.plankWidthM == b.plankWidthM else {
+                        throw MaterialInputError.invalid
+                    }
+                    let joined = try joinRooms(a.room, b.room)
                     let inputs = selected.map(FloorSnapshot.init)
                     var item = Floor.State(
                         id: uuid(),
@@ -924,6 +978,7 @@ public struct Workspace {
                         plankWidthM: selected[0].plankWidthM,
                         accessID: selected[0].accessID == selected[1].accessID ? selected[0].accessID : nil
                     )
+                    item.roomID = selected[0].roomID
                     item.copyMaterial(from: selected[0])
                     item.storey = selected[0].storey == selected[1].storey ? selected[0].storey : nil
                     let correction = GeometryCorrection(
