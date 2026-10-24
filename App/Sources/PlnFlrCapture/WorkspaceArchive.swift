@@ -27,6 +27,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var scans: [ScanRecord]
         var floors: [FloorRecord]
         var selectedFloorIDs: [UUID]
+        var planningScope: PlanningScope?
         var splitAtM: String
         var splitAxis: SplitAxis
         var geometryCorrections: [GeometryCorrection]
@@ -38,8 +39,6 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var walls: [WallSegment]
         var utilities: [UtilityRoute]
         var furniture: [FurnitureItem]
-        var furnitureChanges: [FurnitureChange]
-        var undoneFurnitureChangeIDs: [UUID]
         var parts: [ModelPart]
 
         init(_ state: Workspace.Project.State) {
@@ -48,6 +47,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             scans = state.scans.map { ScanRecord(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) }
             floors = state.floors.map(FloorRecord.init)
             selectedFloorIDs = state.selectedFloorIDs
+            planningScope = state.planningScope
             splitAtM = state.splitAtM
             splitAxis = state.splitAxis
             geometryCorrections = state.geometryCorrections
@@ -59,13 +59,11 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = state.walls
             utilities = state.utilities
             furniture = state.furniture
-            furnitureChanges = state.furnitureChanges
-            undoneFurnitureChangeIDs = state.undoneFurnitureChangeIDs
             parts = state.parts
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, furnitureChanges, undoneFurnitureChangeIDs, parts
+            case id, name, scans, floors, selectedFloorIDs, planningScope, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
         }
 
         public init(from decoder: Decoder) throws {
@@ -75,6 +73,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             scans = try container.decode([ScanRecord].self, forKey: .scans)
             floors = try container.decode([FloorRecord].self, forKey: .floors)
             selectedFloorIDs = try container.decode([UUID].self, forKey: .selectedFloorIDs)
+            planningScope = try container.decodeIfPresent(PlanningScope.self, forKey: .planningScope)
             splitAtM = try container.decode(String.self, forKey: .splitAtM)
             splitAxis = try container.decode(SplitAxis.self, forKey: .splitAxis)
             geometryCorrections = try container.decodeIfPresent([GeometryCorrection].self, forKey: .geometryCorrections) ?? []
@@ -86,20 +85,19 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             walls = try container.decodeIfPresent([WallSegment].self, forKey: .walls) ?? []
             utilities = try container.decodeIfPresent([UtilityRoute].self, forKey: .utilities) ?? []
             furniture = try container.decodeIfPresent([FurnitureItem].self, forKey: .furniture) ?? []
-            furnitureChanges = try container.decodeIfPresent([FurnitureChange].self, forKey: .furnitureChanges) ?? []
-            undoneFurnitureChangeIDs = try container.decodeIfPresent([UUID].self, forKey: .undoneFurnitureChangeIDs) ?? []
             parts = try container.decodeIfPresent([ModelPart].self, forKey: .parts) ?? []
         }
 
         var state: Workspace.Project.State {
-            .init(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) },
+            var state = Workspace.Project.State(id: id, name: name, scans: scans.map { .init(id: $0.id, label: $0.label, rooms: $0.rooms, roomPlanJSON: $0.roomPlanJSON, roomPlanStructure: $0.roomPlanStructure, sourceUsdz: $0.sourceUsdz, transform: $0.transform) },
                   floors: floors.map(\.state), selectedFloorIDs: selectedFloorIDs,
                   splitAtM: splitAtM, splitAxis: splitAxis, geometryCorrections: geometryCorrections,
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture,
-                  furnitureChanges: furnitureChanges, undoneFurnitureChangeIDs: undoneFurnitureChangeIDs, parts: parts)
+                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+            state.planningScope = planningScope
+            return state
         }
     }
 
@@ -199,14 +197,7 @@ public struct WorkspaceStorage: Sendable {
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
-        try validate(archive)
-        return archive
-    }
-
-    private func validate(_ archive: WorkspaceArchive) throws {
-        guard Set(archive.projects.map(\.id)).count == archive.projects.count else { throw MaterialInputError.invalid }
         for project in archive.projects {
-            try project.state.validateFurniture()
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
@@ -229,13 +220,10 @@ public struct WorkspaceStorage: Sendable {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
         }
+        return archive
     }
 
     public func save(_ archive: WorkspaceArchive) throws {
-        try validate(archive)
-        if FileManager.default.fileExists(atPath: url.path) {
-            _ = try load()
-        }
         let data = try JSONEncoder().encode(archive)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)

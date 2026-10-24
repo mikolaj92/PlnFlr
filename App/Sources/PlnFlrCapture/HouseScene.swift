@@ -100,9 +100,7 @@ public struct FurnitureItem: Codable, Equatable, Sendable, Identifiable {
     public var state: RecordState
     public var hidden: Bool
     public var provenance: String?
-    public var floorID: UUID?
-    public var rotationDegreesAroundPositiveZ: Int?
-    public init(id: UUID, name: String, size: ScenePoint, origin: ScenePoint, state: RecordState, hidden: Bool = false, provenance: String? = nil, floorID: UUID? = nil, rotationDegreesAroundPositiveZ: Int? = nil) {
+    public init(id: UUID, name: String, size: ScenePoint, origin: ScenePoint, state: RecordState, hidden: Bool = false, provenance: String? = nil) {
         self.id = id
         self.name = name
         self.size = size
@@ -110,8 +108,6 @@ public struct FurnitureItem: Codable, Equatable, Sendable, Identifiable {
         self.state = state
         self.hidden = hidden
         self.provenance = provenance
-        self.floorID = floorID
-        self.rotationDegreesAroundPositiveZ = rotationDegreesAroundPositiveZ
     }
 }
 
@@ -497,7 +493,6 @@ public enum HouseScene {
         for item in furniture where !item.hidden {
             let node = SCNNode(geometry: SCNBox(width: Double(item.size.xMm) / 1000, height: Double(item.size.zMm) / 1000, length: Double(item.size.yMm) / 1000, chamferRadius: 0))
             node.name = "furniture.\(item.id.uuidString)"
-            node.eulerAngles = SCNVector3(0, -Double(item.rotationDegreesAroundPositiveZ ?? 0) * .pi / 180, 0)
             node.position = SCNVector3(Double(item.origin.xMm) / 1000, Double(item.origin.zMm) / 1000, Double(item.origin.yMm) / 1000)
             scene.rootNode.addChildNode(node)
         }

@@ -100,6 +100,12 @@ public struct ScanTransform: Codable, Equatable, Sendable {
     }
 }
 
+public enum PlanningScope: Codable, Equatable, Hashable, Sendable {
+    case room(UUID)
+    case storey(String)
+    case house
+}
+
 /// Sum of separate floor plans for one selection. Rooms are not unioned, so overlap is counted twice.
 public struct FloorVariant: Codable, Equatable, Sendable, Identifiable {
     public static let sumLabel = "Suma osobnych planów podłogi"
@@ -365,14 +371,15 @@ public struct Workspace {
             public var utilities: [UtilityRoute]
             public var utilityError: String?
             public var furniture: [FurnitureItem]
-            public var furnitureChanges: [FurnitureChange]
-            public var undoneFurnitureChangeIDs: [UUID]
             public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
             public var projectID: UUID
             public var scans: [Scan.State]
             public var selectedFloorIDs: [UUID]
+            public var planningScope: PlanningScope?
+            public var plannedScope: PlanningScope?
+            public var plannedInputs: [FloorSnapshot]?
             public var splitAtM: String
             public var splitAxis: SplitAxis
 
@@ -394,8 +401,6 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
-                furnitureChanges: [FurnitureChange] = [],
-                undoneFurnitureChangeIDs: [UUID] = [],
                 parts: [ModelPart] = []
             ) {
                 self.error = error
@@ -409,8 +414,6 @@ public struct Workspace {
                 self.walls = walls
                 self.utilities = utilities
                 self.furniture = furniture
-                self.furnitureChanges = furnitureChanges
-                self.undoneFurnitureChangeIDs = undoneFurnitureChangeIDs
                 self.parts = parts
                 self.name = name
                 self.projectID = id
@@ -430,10 +433,6 @@ public struct Workspace {
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
             case saveUtility(UtilityRouteDraft)
-            case addFurniture(FurnitureItem)
-            case moveFurniture(UUID, ScenePoint, Int, String)
-            case setFurnitureHidden(UUID, Bool, String)
-            case undoLastFurnitureChange
             case undoLastPartButtonTapped
         }
 
@@ -460,23 +459,6 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
-                case .addFurniture, .moveFurniture, .setFurnitureHidden, .undoLastFurnitureChange:
-                    do {
-                        switch action {
-                        case .addFurniture(let item):
-                            try state.addFurniture(item, changeID: uuid())
-                        case .moveFurniture(let id, let origin, let rotation, let provenance):
-                            try state.moveFurniture(id, to: origin, rotationDegreesAroundPositiveZ: rotation, provenance: provenance, changeID: uuid())
-                        case .setFurnitureHidden(let id, let hidden, let provenance):
-                            try state.setFurnitureHidden(id, hidden: hidden, provenance: provenance, changeID: uuid())
-                        case .undoLastFurnitureChange:
-                            state.undoLastFurnitureChange()
-                        default: break
-                        }
-                        state.error = nil
-                    } catch {
-                        state.error = error.localizedDescription
-                    }
                 case .saveUtility(let draft):
                     do {
                         let route = try draft.validatedRoute(id: draft.routeID ?? uuid())
@@ -751,7 +733,7 @@ public struct Workspace {
                 guard let p = state.projects.firstIndex(where: { $0.id == projectID }),
                       state.projects[p].activeFloorVariant == nil else { return }
                 do {
-                    let floors = try state.projects[p].floorsForPlanning(state.projects[p].selectedFloorIDs)
+                    let floors = try state.projects[p].resolvePlanningScope()
                     guard state.canPlan(floors) else {
                         state.isPaywallPresented = true
                         return
@@ -776,7 +758,13 @@ public struct Workspace {
                 state.planFloors([floorID], projectID: projectID)
             case .planSelectedFloorsButtonTapped(let projectID):
                 guard let project = state.projects.first(where: { $0.id == projectID }) else { return }
-                state.planFloors(project.selectedFloorIDs, projectID: projectID)
+                do {
+                    state.planFloors(try project.resolvePlanningScope().map(\.id), projectID: projectID)
+                } catch {
+                    if let p = state.projects.firstIndex(where: { $0.id == projectID }) {
+                        state.projects[p].error = error.localizedDescription
+                    }
+                }
             case .proAccessChanged(let hasPro):
                 state.applyProAccess(hasPro)
             case .importFailed(let message):
