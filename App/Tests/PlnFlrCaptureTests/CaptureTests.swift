@@ -40,7 +40,7 @@ import Testing
     }
 
     let restored = try storage.load()
-    #expect(restored.version == 2)
+    #expect(restored.version == 1)
     #expect(restored.state.projects[0].scans[0].transform == placed)
     #expect(restored.state.projects[0].scans[0].sourceUsdz == sourceUsdz)
     #expect(restored.state.projects[0].scans[0].roomPlanStructure?.structure == structure)
@@ -92,10 +92,8 @@ import Testing
     let first = Workspace.Floor.State(id: firstID, name: "Salon", room: try rectangle(widthMm: 4000, heightMm: 3000))
     let second = Workspace.Floor.State(id: secondID, name: "Kuchnia", room: try rectangle(widthMm: 2000, heightMm: 2000))
     let scan = Workspace.Scan.State(id: UUID(uuidString: "00000000-0000-0000-0000-000000000023")!, label: "Skan", rooms: [], sourceUsdz: source)
-    var state = Workspace.State(
-        projects: [.init(id: projectID, name: "Dom", scans: [scan], floors: [first, second], selectedFloorIDs: [firstID, secondID])],
-        selectedProjectID: projectID
-    )
+    var state = Workspace.State(projects: [.init(id: projectID, name: "Dom", scans: [scan], floors: [first, second], selectedFloorIDs: [firstID, secondID])], selectedProjectID: projectID)
+    state.projects[0].planningScope = .house
     state.hasLoaded = true
     state.hasPro = true
     let store = await TestStoreActor(initialState: state) {
@@ -105,6 +103,8 @@ import Testing
     let secondPlan = try second.makePlan()
 
     await store.send(.createFloorVariantButtonTapped(projectID)) {
+        $0.projects[0].plannedScope = .house
+        $0.projects[0].plannedInputs = [FloorSnapshot(first), FloorSnapshot(second)]
         $0.projects[0].floors[0].plan = firstPlan
         $0.projects[0].floors[1].plan = secondPlan
         var variant = FloorVariant(
@@ -122,7 +122,7 @@ import Testing
     }
 
     let restored = try storage.load()
-    #expect(restored.version == 2)
+    #expect(restored.version == 1)
     #expect(restored.state.projects[0].floorVariants[0].areaNetMm2 == firstPlan.bom.areaNetMm2 + secondPlan.bom.areaNetMm2)
     #expect(restored.state.projects[0].scans[0].sourceUsdz == source)
 
