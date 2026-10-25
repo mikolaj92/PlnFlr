@@ -1,13 +1,14 @@
 import Foundation
 
 enum PlanningScopeError: LocalizedError {
-    case unselected, empty, missing
+    case unselected, empty, missing, accessDenied
 
     var errorDescription: String? {
         switch self {
         case .unselected: "Wybierz pokój, kondygnację lub dom. Zaznaczenie geometrii nie zmienia zakresu."
         case .empty: "Zakres nie zawiera powierzchni. Sprawdź przypisania pokoi."
         case .missing: "Powierzchnia zakresu już nie istnieje. Wybierz zakres ponownie."
+        case .accessDenied: "Obliczenie wszystkich powierzchni wariantu wymaga PlnFlr Pro."
         }
     }
 }

@@ -89,9 +89,33 @@ extension Workspace.State {
     mutating func refreshPlans() {
         for p in projects.indices {
             let active = projects[p].activeFloorVariant
+            if let active {
+                do {
+                    let floors = try projects[p].floorsForPlanning(active.floorIDs)
+                    guard hasPro || floors.allSatisfy({ $0.accessID == freeRoomID }) else {
+                        throw PlanningScopeError.accessDenied
+                    }
+                    let plans = try floors.map { try $0.makePlan() }
+                    for (floor, plan) in zip(floors, plans) {
+                        if let f = projects[p].floors.firstIndex(where: { $0.id == floor.id }) {
+                            projects[p].floors[f].plan = plan
+                            projects[p].floors[f].error = nil
+                        }
+                    }
+                    if let index = projects[p].floorVariants.firstIndex(where: { $0.id == active.id }) {
+                        projects[p].floorVariants[index].inputs = floors.map(FloorSnapshot.init)
+                    }
+                } catch {
+                    projects[p].error = error.localizedDescription
+                    for f in projects[p].floors.indices where active.floorIDs.contains(projects[p].floors[f].id) {
+                        projects[p].floors[f].plan = nil
+                        projects[p].floors[f].error = error.localizedDescription
+                    }
+                }
+            }
             for f in projects[p].floors.indices {
                 let floor = projects[p].floors[f]
-                guard floor.plan != nil || active?.floorIDs.contains(floor.id) == true else { continue }
+                guard floor.plan != nil, active?.floorIDs.contains(floor.id) != true else { continue }
                 guard hasPro || floor.accessID == freeRoomID else {
                     projects[p].floors[f].plan = nil
                     continue
@@ -102,12 +126,6 @@ extension Workspace.State {
                 } catch {
                     projects[p].floors[f].plan = nil
                     projects[p].floors[f].error = error.localizedDescription
-                }
-            }
-            if let active, let index = projects[p].floorVariants.firstIndex(where: { $0.id == active.id }) {
-                let floors = projects[p].floors.filter { active.floorIDs.contains($0.id) }
-                if floors.count == active.floorIDs.count {
-                    projects[p].floorVariants[index].inputs = floors.map(FloorSnapshot.init)
                 }
             }
         }
