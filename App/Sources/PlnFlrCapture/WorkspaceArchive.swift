@@ -202,8 +202,9 @@ public struct WorkspaceStorage: Sendable {
 
     private func validate(_ archive: WorkspaceArchive) throws {
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
+        var furnitureIDs = Set<UUID>()
         for project in archive.projects {
-            guard Set(project.furniture.map(\.id)).count == project.furniture.count,
+            guard project.furniture.allSatisfy({ furnitureIDs.insert($0.id).inserted }),
                   project.furniture.allSatisfy({ $0.size.xMm > 0 && $0.size.yMm > 0 && $0.size.zMm > 0 }) else {
                 throw MaterialInputError.invalid
             }
