@@ -268,8 +268,10 @@ public struct WorkspaceStorage: Sendable {
     }
 
     public func save(_ archive: WorkspaceArchive) throws {
-        if (1...2).contains(archive.version) { try archive.validate() }
+        try archive.validate()
         let data = try JSONEncoder().encode(archive)
+        _ = try JSONDecoder().decode(WorkspaceArchive.self, from: data)
+        if FileManager.default.fileExists(atPath: url.path) { _ = try load() }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
     }
