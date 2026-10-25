@@ -167,19 +167,6 @@ public struct ScanPlacement: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-public struct FurnitureChange: Codable, Equatable, Sendable, Identifiable {
-    public let id: UUID
-    public let before: FurnitureItem
-    public let after: FurnitureItem
-    public var isUndone = false
-
-    public init(id: UUID, before: FurnitureItem, after: FurnitureItem) {
-        self.id = id
-        self.before = before
-        self.after = after
-    }
-}
-
 public struct ModelPart: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var name: String
@@ -384,13 +371,6 @@ public struct Workspace {
             public var utilities: [UtilityRoute]
             public var utilityError: String?
             public var furniture: [FurnitureItem]
-            public var furnitureChanges: [FurnitureChange]
-
-            public var undoableFurnitureChange: FurnitureChange? {
-                guard let change = furnitureChanges.last(where: { !$0.isUndone }),
-                      furniture.contains(change.after) else { return nil }
-                return change
-            }
             public var parts: [ModelPart]
             public var id: UUID { projectID }
             public var name: String
@@ -421,7 +401,6 @@ public struct Workspace {
                 walls: [WallSegment] = [],
                 utilities: [UtilityRoute] = [],
                 furniture: [FurnitureItem] = [],
-                furnitureChanges: [FurnitureChange] = [],
                 parts: [ModelPart] = []
             ) {
                 self.error = error
@@ -435,7 +414,6 @@ public struct Workspace {
                 self.walls = walls
                 self.utilities = utilities
                 self.furniture = furniture
-                self.furnitureChanges = furnitureChanges
                 self.parts = parts
                 self.name = name
                 self.projectID = id
@@ -455,9 +433,6 @@ public struct Workspace {
             case extractPart(UUID, String, [String])
             case detachPart(UUID)
             case saveUtility(UtilityRouteDraft)
-            case moveFurniture(UUID, ScenePoint)
-            case setFurnitureHidden(UUID, Bool)
-            case undoLastFurnitureChangeButtonTapped
             case undoLastPartButtonTapped
         }
 
@@ -484,16 +459,6 @@ public struct Workspace {
             }
             Update { state, action in
                 switch action {
-                case .moveFurniture(let id, let origin):
-                    state.changeFurniture(id: id, changeID: uuid()) { $0.origin = origin }
-                case .setFurnitureHidden(let id, let hidden):
-                    state.changeFurniture(id: id, changeID: uuid()) { $0.hidden = hidden }
-                case .undoLastFurnitureChangeButtonTapped:
-                    guard let change = state.undoableFurnitureChange,
-                          let itemIndex = state.furniture.firstIndex(where: { $0.id == change.after.id }),
-                          let changeIndex = state.furnitureChanges.firstIndex(where: { $0.id == change.id }) else { return }
-                    state.furniture[itemIndex] = change.before
-                    state.furnitureChanges[changeIndex].isUndone = true
                 case .saveUtility(let draft):
                     do {
                         let route = try draft.validatedRoute(id: draft.routeID ?? uuid())
@@ -1011,17 +976,6 @@ public struct Workspace {
 }
 
 extension Workspace.Project.State {
-    mutating func changeFurniture(id: UUID, changeID: UUID, update: (inout FurnitureItem) -> Void) {
-        guard let index = furniture.firstIndex(where: { $0.id == id }) else { return }
-        let before = furniture[index]
-        var after = before
-        update(&after)
-        guard before != after else { return }
-        after.provenance = "Ręczna korekta"
-        furniture[index] = after
-        furnitureChanges.append(FurnitureChange(id: changeID, before: before, after: after))
-    }
-
     mutating func detachPart(_ id: UUID) {
         parts.removeAll { $0.id == id }
         error = nil
