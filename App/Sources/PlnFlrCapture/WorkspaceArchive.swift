@@ -324,8 +324,10 @@ extension WorkspaceArchive {
             guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
-            for variant in project.floorVariants where variant.before != nil {
-                guard let before = variant.before, let inputs = variant.inputs,
+            for variant in project.floorVariants {
+                guard variant.before != nil || variant.inputs == nil else { throw MaterialInputError.invalid }
+                guard let before = variant.before else { continue }
+                guard let inputs = variant.inputs,
                       !variant.floorIDs.isEmpty,
                       Set(variant.floorIDs).count == variant.floorIDs.count,
                       Set(before.map(\.id)) == Set(variant.floorIDs),
