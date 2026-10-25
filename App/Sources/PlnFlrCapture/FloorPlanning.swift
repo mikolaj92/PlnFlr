@@ -18,37 +18,6 @@ public enum FloorFinish: String, Codable, Equatable, Sendable {
     }
 }
 
-enum FloorPlanningError: LocalizedError {
-    case emptySelection
-    case duplicateFloor
-    case missingFloor(UUID)
-    case accessRequired
-    case changedInputs
-
-    var errorDescription: String? {
-        switch self {
-        case .emptySelection: "Nie wybrano powierzchni do obliczenia."
-        case .duplicateFloor: "Zakres zawiera powtórzoną powierzchnię."
-        case .missingFloor(let id): "Powierzchnia \(id) nie istnieje w projekcie."
-        case .accessRequired: "Ten wariant wymaga dostępu Pro lub uprawnienia do wszystkich jego powierzchni."
-        case .changedInputs: "Dane wariantu zmieniły się. Cofnij wariant i oblicz go ponownie."
-        }
-    }
-}
-
-extension Workspace.Project.State {
-    func floorsForPlanning(_ ids: [UUID]) throws -> [Workspace.Floor.State] {
-        guard !ids.isEmpty else { throw FloorPlanningError.emptySelection }
-        guard Set(ids).count == ids.count else { throw FloorPlanningError.duplicateFloor }
-        return try ids.map { id in
-            guard let floor = floors.first(where: { $0.id == id }) else {
-                throw FloorPlanningError.missingFloor(id)
-            }
-            return floor
-        }
-    }
-}
-
 extension Workspace.Floor.State {
     mutating func copyMaterial(from other: Self) {
         material = other.material

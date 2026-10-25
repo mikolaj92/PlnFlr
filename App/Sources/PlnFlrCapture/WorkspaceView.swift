@@ -108,8 +108,8 @@ public struct WorkspaceView: View {
                     UtilitiesView(store: projectStore)
                     DrillCheckView(routes: project.utilities)
                         .id(project.projectID)
-                    if !project.scans.isEmpty {
-                        ScanSceneView(scans: project.scans)
+                    if !project.scans.isEmpty || !project.furniture.isEmpty {
+                        ScanSceneView(scans: project.scans, furniture: project.furniture)
                         RoomPlanSourceListView(scans: project.scans)
                         if project.scans.count >= 2 {
                             Text("Skany pozostają osobne. Nakładające się ściany nie są automatycznie usuwane. Wycinanie duplikatów nie jest jeszcze dostępne.")
@@ -123,7 +123,7 @@ public struct WorkspaceView: View {
                         }
                         WelcomeView(store: store)
                     } else {
-                        HouseCanvas(floors: project.floors, selectedID: project.selectedFloorIDs.first)
+                        HouseCanvas(floors: (try? project.resolvePlanningScope()) ?? [], selectedID: project.selectedFloorIDs.first)
                             .frame(height: 220)
                             .padding()
                             .background(.quaternary, in: .rect(cornerRadius: 16))
@@ -135,24 +135,30 @@ public struct WorkspaceView: View {
                         }
                         HStack {
                             Button("Utwórz wariant podłogi") { store.send(.createFloorVariantButtonTapped(project.id)) }
-                                .disabled(project.activeFloorVariant != nil || project.selectedFloorIDs.isEmpty)
+                                .disabled(project.activeFloorVariant != nil || (try? project.resolvePlanningScope()) == nil)
                             Button("Policz zakres") { store.send(.planSelectedFloorsButtonTapped(project.id)) }
-                                .disabled(project.selectedFloorIDs.isEmpty)
+                                .disabled((try? project.resolvePlanningScope()) == nil)
                             if project.activeFloorVariant != nil {
                                 Button("Cofnij wariant podłogi") { projectStore.send(.undoLastFloorVariantButtonTapped) }
                             }
                         }
-                        Text("Zakres: \(project.selectedFloorIDs.count) powierzchni. \(FloorVariant.sumLabel). Bez optymalizacji odpadów między pokojami.")
+                        Text("Zakres: \((try? project.resolvePlanningScope())?.count ?? 0) powierzchni. \(FloorVariant.sumLabel). Bez optymalizacji odpadów między pokojami.")
                             .font(.caption).foregroundStyle(.secondary)
                         if let floors = project.selectedPlans {
                             Text("Netto \(approximateArea(floors.reduce(0) { $0 + ($1.plan?.bom.areaNetMm2 ?? 0) })) · materiał \(approximateArea(floors.reduce(0) { $0 + ($1.plan?.bom.areaBoughtMm2 ?? 0) }))")
                             Text("Elementy: \(floors.reduce(0) { $0 + ($1.plan?.bom.pieces ?? 0) }). Paczki i materiał osobno dla każdego pokoju.")
                         }
-                        ForEach(projectStore.scope(\.floors).filter { project.selectedFloorIDs.contains($0.floorID) }) { floor in
+                        if let message = project.planningScopeMessage {
+                            Text(message).accessibilityIdentifier("planningScopeStatus")
+                        }
+                        ForEach(projectStore.scope(\.floors).filter { floor in
+                            ((try? project.resolvePlanningScope()) ?? []).contains { $0.id == floor.floorID }
+                        }) { floor in
                             FloorView(store: floor,
                                       locked: !store.hasPro && store.freeRoomID != nil && store.freeRoomID != floor.accessID,
-                                      editable: project.activeFloorVariant?.floorIDs.contains(floor.floorID) == true) {
-                                store.send(.planFloorButtonTapped(project.id, floor.floorID))
+                                      editable: project.activeFloorVariant?.floorIDs.contains(floor.floorID) == true,
+                                      resultIsCurrent: project.selectedPlans != nil) {
+                                store.send(.planSelectedFloorsButtonTapped(project.id))
                             }
                         }
                         DisclosureGroup("Podział i łączenie powierzchni") {
@@ -406,6 +412,7 @@ private struct UtilityRouteEditor: View {
 private struct ScanSceneView: View {
     let scans: [Workspace.Scan.State]
     var selection: [String]? = nil
+    var furniture: [FurnitureItem] = []
     var title = "Wspólna mapa skanów 3D"
     var allowsWallAppearance = false
     @State private var scene: SCNScene?
@@ -422,7 +429,7 @@ private struct ScanSceneView: View {
                 SceneView(scene: scene, pointOfView: scene.rootNode.childNode(withName: "scans.camera", recursively: false),
                           options: [.allowsCameraControl, .autoenablesDefaultLighting], preferredFramesPerSecond: 30)
                     .frame(height: 360)
-                    .accessibilityLabel("Wspólna mapa skanów. Źródła: \(scans.count)")
+                    .accessibilityLabel("Wspólna mapa skanów. Źródła: \(scans.count). Widoczne meble: \(furniture.filter { !$0.hidden }.count)")
                     .accessibilityIdentifier("scanScenePreview")
             }
             #if os(iOS)
@@ -453,6 +460,17 @@ private struct ScanSceneView: View {
             ForEach(Array(errors.enumerated()), id: \.offset) { _, message in
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
+            ForEach(furniture) { item in
+                VStack(alignment: .leading) {
+                    Text(item.name).font(.headline)
+                    Text(item.hidden ? "Mebel ukryty" : "Mebel widoczny")
+                    Text("Pozycja: X \(item.origin.xMm), Y \(item.origin.yMm), Z \(item.origin.zMm) mm")
+                    Text("Wymiary: \(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm")
+                    Text(item.state == .existing ? "Stan: istniejący" : "Stan: planowany")
+                    Text("Pochodzenie: \(item.provenance.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? "niezapisane w modelu")")
+                }
+                .accessibilityElement(children: .combine)
+            }
             Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
                 .font(.caption).foregroundStyle(.secondary)
             Text("Ustawienie zmienia tylko podgląd źródła. Podłogi i obliczenia pozostają bez zmian.")
@@ -460,10 +478,11 @@ private struct ScanSceneView: View {
         }
         .onChange(of: scans, initial: true) { _, _ in refreshScene() }
         .onChange(of: selection) { _, _ in refreshScene() }
+        .onChange(of: furniture) { _, _ in refreshScene() }
     }
 
     private func refreshScene() {
-        let preview = HouseScene.scans(scans, selection: selection)
+        let preview = HouseScene.scans(scans, selection: selection, furniture: furniture)
         scene = preview.scene.rootNode.childNode(withName: "scans.camera", recursively: false) == nil ? nil : preview.scene
         errors = preview.errors
         #if os(iOS)
@@ -738,19 +757,23 @@ private struct RoomSelectionView: View {
         VStack(alignment: .leading) {
             Text("Wybierz zakres").font(.headline)
             HStack {
-                Button("Cały dom") { $store.selectedFloorIDs.wrappedValue = store.floors.map(\.id) }
+                Button("Cały dom") { $store.planningScope.wrappedValue = .house }
+                    .accessibilityAddTraits(store.planningScope == .house ? .isSelected : [])
                 ForEach(Array(Set(store.floors.compactMap(\.storey).filter { !$0.isEmpty })).sorted(), id: \.self) { storey in
                     Button(storey) {
-                        $store.selectedFloorIDs.wrappedValue = store.floors.filter { $0.storey == storey }.map(\.id)
+                        $store.planningScope.wrappedValue = .storey(storey)
                     }
+                    .accessibilityLabel("Kondygnacja: \(storey)")
+                    .accessibilityAddTraits(store.planningScope == .storey(storey) ? .isSelected : [])
                 }
             }
             ScrollView(.horizontal) {
                 HStack {
                     ForEach(store.floors, id: \.floorID) { floor in
-                        Button(floor.name) { $store.selectedFloorIDs.wrappedValue = [floor.id] }
+                        Button(floor.name) { $store.planningScope.wrappedValue = .room(floor.id) }
                             .buttonStyle(.bordered)
-                            .tint(store.selectedFloorIDs.contains(floor.id) ? .accentColor : .secondary)
+                            .tint(store.planningScope == .room(floor.id) ? .accentColor : .secondary)
+                            .accessibilityAddTraits(store.planningScope == .room(floor.id) ? .isSelected : [])
                     }
                 }
             }
@@ -816,11 +839,13 @@ public struct FloorView: View {
     public var locked: Bool
     public var editable: Bool
     public var onPlan: () -> Void
+    public var resultIsCurrent: Bool
 
-    public init(store: StoreOf<Workspace.Floor>, locked: Bool = false, editable: Bool = true, onPlan: @escaping () -> Void) {
+    public init(store: StoreOf<Workspace.Floor>, locked: Bool = false, editable: Bool = true, resultIsCurrent: Bool = true, onPlan: @escaping () -> Void) {
         self.store = store
         self.locked = locked
         self.editable = editable
+        self.resultIsCurrent = resultIsCurrent
         self.onPlan = onPlan
     }
 
@@ -861,7 +886,7 @@ public struct FloorView: View {
             if let message = store.error {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
-            if let plan = store.plan {
+            if resultIsCurrent, let plan = store.plan {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Plan ułożenia").font(.title2.bold())
                     Text("Elementy: \(plan.bom.pieces) · sztuki materiału: \(plan.bom.fullBoards) · paczki: \(plan.bom.packs.map(String.init) ?? "—")")

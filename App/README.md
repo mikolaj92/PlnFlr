@@ -8,13 +8,13 @@ Bez kont PlnFlr, bez backendu kont, bez TestFlight. Projekty zapisują się na u
 
 Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Na iOS jest także „Skanuj pomieszczenia”: interfejs Apple RoomPlan, zgoda na aparat, zakończenie pokoju, podgląd i opcja „Kolejny pokój”. Między pokojami używamy tej samej sesji AR (`stop(pauseARSession: false)`); Apple `StructureBuilder` składa pokoje przed zapisem. Projekt zachowuje pełne JSON-y oryginalnych `CapturedRoom` oraz wynikowy `CapturedStructure`. Błąd składania pozwala ponowić zapis bez utraty pokoi w bieżącej sesji. Anulowanie odrzuca niezapisany przebieg. Wymaga urządzenia obsługującego RoomPlan/LiDAR. Na Macu pozostaje import USDZ.
 
-Jeden przebieg dotyczy jednej kondygnacji. Osobne sesje nie są automatycznie wyrównywane. Brakuje modelu kondygnacji i przypisań; `storey` jest tekstowym polem podłogi. Skan z aparatu zachowuje źródła, ale nie tworzy podłóg. Na iOS zapisany CapturedStructure można otworzyć w Quick Look. Lista źródeł pokazuje także zachowane USDZ. Podgląd nie potwierdza dokładności pomiarów.
+Jeden przebieg dotyczy jednej kondygnacji. Osobne sesje nie są automatycznie wyrównywane, a model kondygnacji pozostaje do wdrożenia. Skan z aparatu nie tworzy jeszcze podłóg: zachowujemy źródła, bez przybliżonych prostokątów. Na iOS zapisany CapturedStructure można otworzyć w systemowym Quick Look; lista źródeł pokazuje także zachowane USDZ. Podgląd nie potwierdza dokładności skanu względem pomiarów referencyjnych. Starsze skany pojedynczych pokoi nadal się wczytują. Przepływ aparatu jest sprawdzony kompilacją iOS i testami logiki/zapisu, ale wspólne położenie pokoi nie zostało jeszcze zweryfikowane na fizycznym urządzeniu.
 
 ## Uruchomienie
 
 Otwórz **`App/PlnFlrWorkspace.xcworkspace`**, wybierz schemat **PlnFlr** i **My Mac**. Schemat Run ma podpięty `PlnFlr.storekit`: jeden produkt non-consumable `it.patryk.plnflr.pro`. Cena 49,99 jest wyłącznie testowa, nie jest decyzją cenową ani ofertą App Store Connect.
 
-Do budowania nie trzeba konta Apple Developer na macOS ani dla iOS Simulator. Instalacja na fizycznym iPhonie/iPadzie wymaga skonfigurowania podpisywania w Xcode. Minimum: iOS/macOS 26.4. Aktualny host ma Xcode 27 beta z SDK 27; minimalne wersje pozostają 26.4.
+Do budowania nie trzeba konta Apple Developer na macOS ani dla iOS Simulator. Instalacja na fizycznym iPhonie/iPadzie wymaga skonfigurowania podpisywania w Xcode. Minimum: iOS/macOS 26.4.
 
 ```sh
 # Z katalogu repo
@@ -38,8 +38,6 @@ Zwykłe otwarcie `.app` poza Xcode również nie włącza lokalnego sklepu.
 5. Kolejne pokoje pokazują Pro. Ponowne obliczenia i techniczne podziały bezpłatnego pokoju zachowują dostęp. Łączenie odrębnych pokoi tworzy nową powierzchnię, nie przenosi darmowego uprawnienia na dodatkowe pokoje.
 6. Po ponownym uruchomieniu wracają projekty, skany, powierzchnie, ustawienia i wybór darmowego pokoju. W podłodze ustaw wykończenie dąb/orzech oraz przełącz podgląd 2D/3D. Model 3D rysuje te same elementy geometrii, z których wynikają BOM i ilości; kamery można używać do obracania i przybliżania. Podgląd jest wynikiem obliczeń: użyj ponownie **Ułóż podłogę**.
 
-Wariant zachowuje wejścia i sumę z chwili obliczenia. Zmiana wejść lub brak dostępu blokuje odtworzenie jego planów; cofnięcie wariantu pozwala obliczyć go ponownie.
-
 Lokalny limit to 20 000 oszacowanych elementów na plan; bardzo duże siatki są odrzucane przed alokacją. Ręczny obrys jest obecnie prostokątny. Import USDZ i zapis z aparatu są odrębnymi ścieżkami; tylko import USDZ wyprowadza obecnie powierzchnie robocze. Wariant wykończenia (dąb/orzech) zmienia kolory podglądu, nie parametry materiału, układu ani BOM. Podgląd 3D jest uproszczonym renderem geometrii elementów, nie renderem RoomPlan, nie fotorealistyczną teksturą produktu i nie dowodem dokładności skanu.
 
 ## Dane i błędy zapisu
@@ -52,8 +50,6 @@ Darmowy pokój jest lokalnym stanem produktu, nie odpornym na reinstalację licz
 
 ```sh
 swift test --package-path App
-swift test --package-path Kernel
-swift test --package-path Web
 
 # Renderowanie widoków i regresja otworów w dark mode
 xcodebuild -workspace App/PlnFlrWorkspace.xcworkspace -scheme PlnFlr \
@@ -68,7 +64,9 @@ xcodebuild -workspace App/PlnFlrWorkspace.xcworkspace -scheme PlnFlr \
   -only-testing:PlnFlrLocalTests/StoreKitLocalTests test
 ```
 
-Test StoreKit używa prawdziwego adaptera i lokalnej konfiguracji Apple; błąd środowiska nie oznacza pozytywnego odbioru. Renderowanie działa offscreen i nie zastępuje interaktywnego QA. PNG trafiają do `/tmp/plnflr-local-previews` i załączników xcresult.
+**Warunek kontroli StoreKit:** `StoreKitLocalTests` wymaga działającego lokalnego sklepu przez Xcode i poprawnego środowiska Apple. Błąd `it.patryk.plnflr is not entitled for OctaneSaveConfigurationRequest` / `SKInternalErrorDomain Code=3` oraz pusta oferta `Product.products` blokują weryfikację zakupów. Nie obchodzimy błędu prywatnymi entitlementami, fikcyjnym odblokowaniem Pro ani pomijaniem testu. Testy jednostkowe sukces/anulowanie/pending/restore/revocation nie zastępują kontroli adaptera StoreKit.
+
+Uruchomienie na iOS Simulator wymaga zainstalowanego runtime'u; sama kompilacja nie potwierdza działania na iPhonie/iPadzie. Renderowanie w testach jest offscreen; nie zastępuje interaktywnego QA i niektóre systemowe kontrolki mogą nie być widoczne w bitmapie. PNG trafiają do `/tmp/plnflr-local-previews` i załączników xcresult.
 
 ## Projekt Xcode
 
