@@ -8,7 +8,7 @@ Bez kont PlnFlr, bez backendu kont, bez TestFlight. Projekty zapisują się na u
 
 Dzisiaj aplikacja importuje gotowe skany RoomPlan USDZ i obsługuje podłogi. Na iOS jest także „Skanuj pomieszczenia”: interfejs Apple RoomPlan, zgoda na aparat, zakończenie pokoju, podgląd i opcja „Kolejny pokój”. Między pokojami używamy tej samej sesji AR (`stop(pauseARSession: false)`); Apple `StructureBuilder` składa pokoje przed zapisem. Projekt zachowuje pełne JSON-y oryginalnych `CapturedRoom` oraz wynikowy `CapturedStructure`. Błąd składania pozwala ponowić zapis bez utraty pokoi w bieżącej sesji. Anulowanie odrzuca niezapisany przebieg. Wymaga urządzenia obsługującego RoomPlan/LiDAR. Na Macu pozostaje import USDZ.
 
-Jeden przebieg dotyczy jednej kondygnacji. Model zapisuje pokoje, przypisania powierzchni do pokoi i opcjonalne przypisania pokoi do kondygnacji. Kondygnacje mają wysokość w całkowitych milimetrach we wspólnych współrzędnych domu. Przypisanie nie przesuwa geometrii ani nie potwierdza wyrównania osobnych sesji. Skan z aparatu nie tworzy jeszcze podłóg: zachowujemy źródła, bez przybliżonych prostokątów. Na iOS zapisany CapturedStructure można otworzyć w systemowym Quick Look; lista źródeł pokazuje także zachowane USDZ. Podgląd nie potwierdza dokładności skanu względem pomiarów referencyjnych. Starsze skany pojedynczych pokoi nadal się wczytują. Przepływ aparatu jest sprawdzony kompilacją iOS i testami logiki/zapisu, ale wspólne położenie pokoi nie zostało jeszcze zweryfikowane na fizycznym urządzeniu.
+Jeden przebieg dotyczy jednej kondygnacji. Osobne sesje nie są automatycznie wyrównywane, a model kondygnacji pozostaje do wdrożenia. Skan z aparatu nie tworzy jeszcze podłóg: zachowujemy źródła, bez przybliżonych prostokątów. Na iOS zapisany CapturedStructure można otworzyć w systemowym Quick Look; lista źródeł pokazuje także zachowane USDZ. Podgląd nie potwierdza dokładności skanu względem pomiarów referencyjnych. Starsze skany pojedynczych pokoi nadal się wczytują. Przepływ aparatu jest sprawdzony kompilacją iOS i testami logiki/zapisu, ale wspólne położenie pokoi nie zostało jeszcze zweryfikowane na fizycznym urządzeniu.
 
 ## Uruchomienie
 
@@ -35,14 +35,14 @@ Zwykłe otwarcie `.app` poza Xcode również nie włącza lokalnego sklepu.
 2. Wybierz pokój; ustaw deski/panele lub płytki, wymiary, paczkę, dylatację i fugę.
 3. Wybierz **Ułóż podłogę**. Zobacz mapę elementów, paczki, odpad, ostrzeżenia i kolejność układania.
 4. Pierwsze udane obliczenie przypisuje bezpłatny dostęp do tego pokoju. Import wielu pomieszczeń nie jest blokowany. Błędne obliczenie nie wykorzystuje darmowego pokoju.
-5. Kolejne pokoje pokazują Pro. Techniczne podziały zachowują pokój i dostęp. Łączenie wymaga zgodnego pokoju, dostępu oraz ustawień materiału.
+5. Kolejne pokoje pokazują Pro. Ponowne obliczenia i techniczne podziały bezpłatnego pokoju zachowują dostęp. Łączenie odrębnych pokoi tworzy nową powierzchnię, nie przenosi darmowego uprawnienia na dodatkowe pokoje.
 6. Po ponownym uruchomieniu wracają projekty, skany, powierzchnie, ustawienia i wybór darmowego pokoju. W podłodze ustaw wykończenie dąb/orzech oraz przełącz podgląd 2D/3D. Model 3D rysuje te same elementy geometrii, z których wynikają BOM i ilości; kamery można używać do obracania i przybliżania. Podgląd jest wynikiem obliczeń: użyj ponownie **Ułóż podłogę**.
 
 Lokalny limit to 20 000 oszacowanych elementów na plan; bardzo duże siatki są odrzucane przed alokacją. Ręczny obrys jest obecnie prostokątny. Import USDZ i zapis z aparatu są odrębnymi ścieżkami; tylko import USDZ wyprowadza obecnie powierzchnie robocze. Wariant wykończenia (dąb/orzech) zmienia kolory podglądu, nie parametry materiału, układu ani BOM. Podgląd 3D jest uproszczonym renderem geometrii elementów, nie renderem RoomPlan, nie fotorealistyczną teksturą produktu i nie dowodem dokładności skanu.
 
 ## Dane i błędy zapisu
 
-`Application Support/PlnFlr/workspace.json` zapisuje format 2: relacje, historię i opcjonalny zakres projektu pokój/kondygnacja/dom, niezależny od zaznaczenia powierzchni i dotychczasowego zakresu interfejsu. Odczyt formatu 1 tworzy pokoje z ID powierzchni, także historycznych; nie tworzy kondygnacji ani zakresu projektu. Zapis sprawdza relacje bieżące i historyczne oraz istniejący plik przed atomową zamianą. Błąd pozwala ponowić zapis; uszkodzony plik pozostaje bez zmian. Plik nie jest szyfrowany. Nie ma iCloud ani odzyskiwania kopii z UI.
+`Application Support/PlnFlr/workspace.json` (w kontenerze aplikacji dla sandboxowanej `.app`; SPM używa zwykłego katalogu użytkownika). Zapis atomowy po zmianach danych projektu, także przez bindings. Błąd zapisu jest widoczny z opcją ponowienia. Nieczytelny/nieobsługiwany plik blokuje zapis, aby nie nadpisać go pustym projektem. Nie ma automatycznego kasowania ani resetu danych. W tej wersji nie ma iCloud ani eksportu/odzyskiwania kopii z UI. Plik nie jest zaszyfrowany.
 
 Darmowy pokój jest lokalnym stanem produktu, nie odpornym na reinstalację licznikiem. Bez własnego konta/serwera nie obiecujemy limitu „raz na osobę”. Zakup Pro można odzyskać przez App Store; nie odzyskuje to samych lokalnych projektów.
 
