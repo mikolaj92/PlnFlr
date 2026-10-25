@@ -5,7 +5,7 @@ import PlnFlrLayout
 /// Durable inputs only. Plans are derived; App Store entitlements never come from this file.
 public struct WorkspaceArchive: Codable, Equatable, Sendable {
     public var freeRoomID: UUID?
-    public var version = 1
+    public var version = 2
     public var projects: [ProjectRecord]
     public var selectedProjectID: UUID?
 
@@ -13,6 +13,31 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         freeRoomID = state.freeRoomID
         projects = state.projects.map(ProjectRecord.init)
         selectedProjectID = state.selectedProjectID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case freeRoomID, version, projects, selectedProjectID
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        guard (1...2).contains(version) else { throw ArchiveError.unsupportedVersion }
+        freeRoomID = try values.decodeIfPresent(UUID.self, forKey: .freeRoomID)
+        selectedProjectID = try values.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
+        projects = try values.decode([ProjectRecord].self, forKey: .projects)
+        if version == 1 {
+            for index in projects.indices {
+                guard projects[index].rooms == nil, projects[index].storeys == nil,
+                      projects[index].planningScope == nil,
+                      projects[index].floors.allSatisfy({ $0.roomID == nil }),
+                      projects[index].snapshots.allSatisfy({ $0.roomID == nil }) else {
+                    throw MaterialInputError.invalid
+                }
+                projects[index].migrateRelationships()
+            }
+        }
+        try validate()
     }
 
     public var state: Workspace.State {
@@ -28,6 +53,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var floors: [FloorRecord]
         var selectedFloorIDs: [UUID]
         var planningScope: PlanningScope?
+        var rooms: [ProjectRoom]?
+        var storeys: [ProjectStorey]?
         var splitAtM: String
         var splitAxis: SplitAxis
         var geometryCorrections: [GeometryCorrection]
@@ -48,6 +75,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             floors = state.floors.map(FloorRecord.init)
             selectedFloorIDs = state.selectedFloorIDs
             planningScope = state.planningScope
+            rooms = state.rooms
+            storeys = state.storeys
             splitAtM = state.splitAtM
             splitAxis = state.splitAxis
             geometryCorrections = state.geometryCorrections
@@ -63,7 +92,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, scans, floors, selectedFloorIDs, planningScope, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
+            case id, name, scans, floors, selectedFloorIDs, planningScope, rooms, storeys, splitAtM, splitAxis, geometryCorrections, undoneGeometryCorrectionIDs, scanPlacements, undoneScanPlacementIDs, floorVariants, undoneFloorVariantIDs, walls, utilities, furniture, parts
         }
 
         public init(from decoder: Decoder) throws {
@@ -74,6 +103,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             floors = try container.decode([FloorRecord].self, forKey: .floors)
             selectedFloorIDs = try container.decode([UUID].self, forKey: .selectedFloorIDs)
             planningScope = try container.decodeIfPresent(PlanningScope.self, forKey: .planningScope)
+            rooms = try container.decodeIfPresent([ProjectRoom].self, forKey: .rooms)
+            storeys = try container.decodeIfPresent([ProjectStorey].self, forKey: .storeys)
             splitAtM = try container.decode(String.self, forKey: .splitAtM)
             splitAxis = try container.decode(SplitAxis.self, forKey: .splitAxis)
             geometryCorrections = try container.decodeIfPresent([GeometryCorrection].self, forKey: .geometryCorrections) ?? []
@@ -95,7 +126,8 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
                   undoneGeometryCorrectionIDs: undoneGeometryCorrectionIDs,
                   scanPlacements: scanPlacements, undoneScanPlacementIDs: undoneScanPlacementIDs,
                   floorVariants: floorVariants, undoneFloorVariantIDs: undoneFloorVariantIDs,
-                  walls: walls, utilities: utilities, furniture: furniture, parts: parts)
+                  walls: walls, utilities: utilities, furniture: furniture, parts: parts,
+                  rooms: rooms, storeys: storeys ?? [])
             state.planningScope = planningScope
             return state
         }
@@ -144,6 +176,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
         var id: UUID
         var name: String
         var storey: String?
+        var roomID: UUID?
         var room: Room
         var thresholds: [Threshold]
         var windows: [Opening]
@@ -160,6 +193,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             id = state.id
             name = state.name
             storey = state.storey
+            roomID = state.roomID
             room = state.room
             thresholds = state.thresholds
             windows = state.windows
@@ -173,6 +207,7 @@ public struct WorkspaceArchive: Codable, Equatable, Sendable {
             var state = Workspace.Floor.State(id: id, name: name, room: room, thresholds: thresholds, windows: windows,
                   expansionMm: expansionMm, plankLengthM: plankLengthM, plankWidthM: plankWidthM, accessID: accessID)
             state.storey = storey
+            state.roomID = roomID ?? id
             state.material = material
             state.packSize = packSize
             state.groutMm = groutMm
@@ -196,9 +231,65 @@ public struct WorkspaceStorage: Sendable {
             return WorkspaceArchive(Workspace.State())
         }
         let archive = try JSONDecoder().decode(WorkspaceArchive.self, from: Data(contentsOf: url))
-        guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
-        for project in archive.projects {
-            guard Set(project.floors.map(\.id)).count == project.floors.count else { throw MaterialInputError.invalid }
+        return archive
+    }
+
+    public func save(_ archive: WorkspaceArchive) throws {
+        try archive.validate()
+        if FileManager.default.fileExists(atPath: url.path) { _ = try load() }
+        let data = try JSONEncoder().encode(archive.version == 1 ? WorkspaceArchive(archive.state) : archive)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+}
+
+extension WorkspaceArchive {
+    func validate() throws {
+        guard (1...2).contains(version) else { throw ArchiveError.unsupportedVersion }
+        guard Set(projects.map(\.id)).count == projects.count,
+              selectedProjectID == nil || projects.contains(where: { $0.id == selectedProjectID }) else {
+            throw MaterialInputError.invalid
+        }
+        for project in projects {
+            guard let rooms = project.rooms, let storeys = project.storeys,
+                  Set(rooms.map(\.id)).count == rooms.count,
+                  Set(storeys.map(\.id)).count == storeys.count,
+                  rooms.allSatisfy({ room in room.storeyID == nil || storeys.contains { $0.id == room.storeyID } }),
+                  project.floors.allSatisfy({ floor in rooms.contains { $0.id == floor.roomID } }),
+                  project.snapshots.allSatisfy({ floor in rooms.contains { $0.id == floor.roomID } }) else {
+                throw MaterialInputError.invalid
+            }
+            switch project.planningScope {
+            case .room(let id):
+                guard rooms.contains(where: { $0.id == id }) else { throw MaterialInputError.invalid }
+            case .storey(let id):
+                guard storeys.contains(where: { $0.id == id }) else { throw MaterialInputError.invalid }
+            case .house, nil: break
+            }
+            for correction in project.geometryCorrections {
+                guard !correction.before.isEmpty, !correction.after.isEmpty,
+                      Set(correction.before.map(\.id)).count == correction.before.count,
+                      Set(correction.after.map(\.id)).count == correction.after.count else { throw MaterialInputError.invalid }
+            }
+            for snapshot in project.snapshots {
+                try validateRoom(outer: snapshot.room.outer.vertices, holes: snapshot.room.holes.map(\.vertices))
+            }
+            guard Set(project.floors.map(\.id)).count == project.floors.count,
+                  Set(project.selectedFloorIDs).count == project.selectedFloorIDs.count,
+                  Set(project.selectedFloorIDs).isSubset(of: Set(project.floors.map(\.id))),
+                  Set(project.geometryCorrections.map(\.id)).count == project.geometryCorrections.count,
+                  Set(project.floorVariants.map(\.id)).count == project.floorVariants.count,
+                  Set(project.scans.map(\.id)).count == project.scans.count,
+                  Set(project.scanPlacements.map(\.id)).count == project.scanPlacements.count,
+                  project.scanPlacements.allSatisfy({ placement in project.scans.contains { $0.id == placement.scanID } }),
+                  Set(project.undoneScanPlacementIDs).count == project.undoneScanPlacementIDs.count,
+                  Set(project.undoneScanPlacementIDs).isSubset(of: Set(project.scanPlacements.map(\.id))),
+                  Set(project.undoneGeometryCorrectionIDs).count == project.undoneGeometryCorrectionIDs.count,
+                  Set(project.undoneGeometryCorrectionIDs).isSubset(of: Set(project.geometryCorrections.map(\.id))),
+                  Set(project.undoneFloorVariantIDs).count == project.undoneFloorVariantIDs.count,
+                  Set(project.undoneFloorVariantIDs).isSubset(of: Set(project.floorVariants.map(\.id))) else {
+                throw MaterialInputError.invalid
+            }
             let active = project.floorVariants.filter { $0.before != nil && !project.undoneFloorVariantIDs.contains($0.id) }
             guard active.count <= 1 else { throw MaterialInputError.invalid }
             for variant in project.floorVariants where variant.before != nil {
@@ -220,13 +311,43 @@ public struct WorkspaceStorage: Sendable {
                 try validateRoom(outer: floor.room.outer.vertices, holes: floor.room.holes.map(\.vertices))
             }
         }
-        return archive
+    }
+}
+
+extension WorkspaceArchive.ProjectRecord {
+    var snapshots: [FloorSnapshot] {
+        geometryCorrections.flatMap { $0.before + $0.after } + floorVariants.flatMap { ($0.before ?? []) + ($0.inputs ?? []) }
     }
 
-    public func save(_ archive: WorkspaceArchive) throws {
-        let data = try JSONEncoder().encode(archive)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
+    mutating func migrateRelationships() {
+        rooms = []
+        storeys = []
+        var membership: [UUID: UUID] = [:]
+        for correction in geometryCorrections {
+            if case .split = correction.operation, let original = correction.before.first {
+                for floor in correction.after { membership[floor.id] = membership[original.id] ?? original.id }
+            }
+        }
+        let normalize: (FloorSnapshot) -> FloorSnapshot = { snapshot in
+            var snapshot = snapshot
+            snapshot.roomID = membership[snapshot.id] ?? snapshot.id
+            return snapshot
+        }
+        for floor in floors.map(\.state).map(FloorSnapshot.init) + snapshots {
+            let roomID = membership[floor.id] ?? floor.id
+            if rooms?.contains(where: { $0.id == roomID }) == false {
+                rooms?.append(ProjectRoom(id: roomID, name: floor.name))
+            }
+        }
+        for index in floors.indices { floors[index].roomID = membership[floors[index].id] ?? floors[index].id }
+        geometryCorrections = geometryCorrections.map { correction in
+            GeometryCorrection(id: correction.id, operation: correction.operation,
+                               before: correction.before.map(normalize), after: correction.after.map(normalize))
+        }
+        for index in floorVariants.indices {
+            floorVariants[index].before = floorVariants[index].before?.map(normalize)
+            floorVariants[index].inputs = floorVariants[index].inputs?.map(normalize)
+        }
     }
 }
 
