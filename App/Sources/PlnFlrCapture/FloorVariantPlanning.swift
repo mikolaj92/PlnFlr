@@ -68,7 +68,7 @@ extension Workspace.State {
         projects[p].error = nil
     }
 
-    mutating func planFloors(_ ids: [UUID], projectID: UUID) {
+    mutating func planFloors(_ ids: [UUID], projectID: UUID, isScopePlanning: Bool = false) {
         guard let p = projects.firstIndex(where: { $0.id == projectID }) else { return }
         do {
             let floors = try projects[p].floorsForPlanning(ids)
@@ -79,7 +79,7 @@ extension Workspace.State {
             let plans = try floors.map { try $0.makePlan() }
             commitPlans(plans, floors: floors, projectIndex: p)
         } catch {
-            if ids.count != 1 { projects[p].error = error.localizedDescription }
+            if isScopePlanning || ids.count != 1 { projects[p].error = error.localizedDescription }
             for f in projects[p].floors.indices where ids.contains(projects[p].floors[f].id) {
                 projects[p].floors[f].error = error.localizedDescription
             }
