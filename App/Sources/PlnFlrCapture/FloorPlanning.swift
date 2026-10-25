@@ -1,20 +1,6 @@
 import Foundation
 import PlnFlrLayout
 
-enum PlanningScopeError: LocalizedError, Equatable {
-    case empty
-    case duplicateFloor
-    case missingFloor(UUID)
-
-    var errorDescription: String? {
-        switch self {
-        case .empty: "Wybierz co najmniej jedną powierzchnię do obliczenia."
-        case .duplicateFloor: "Zakres zawiera powtórzoną powierzchnię. Wybierz każdą powierzchnię tylko raz."
-        case .missingFloor(let id): "Powierzchnia \(id) nie istnieje w projekcie. Wybierz zakres ponownie."
-        }
-    }
-}
-
 public enum FloorMaterial: String, Codable, Equatable, Sendable {
     case plank
     case tile

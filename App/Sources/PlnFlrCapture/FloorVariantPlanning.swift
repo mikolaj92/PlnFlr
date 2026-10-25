@@ -7,10 +7,9 @@ extension Workspace.Project.State {
     }
 
     func floorsForPlanning(_ ids: [UUID]) throws -> [Workspace.Floor.State] {
-        guard !ids.isEmpty else { throw PlanningScopeError.empty }
-        guard Set(ids).count == ids.count else { throw PlanningScopeError.duplicateFloor }
+        guard !ids.isEmpty, Set(ids).count == ids.count else { throw MaterialInputError.invalid }
         return try ids.map { id in
-            guard let floor = floors.first(where: { $0.id == id }) else { throw PlanningScopeError.missingFloor(id) }
+            guard let floor = floors.first(where: { $0.id == id }) else { throw MaterialInputError.invalid }
             return floor
         }
     }
@@ -69,7 +68,7 @@ extension Workspace.State {
         projects[p].error = nil
     }
 
-    mutating func planFloors(_ ids: [UUID], projectID: UUID, reportProjectError: Bool = true) {
+    mutating func planFloors(_ ids: [UUID], projectID: UUID) {
         guard let p = projects.firstIndex(where: { $0.id == projectID }) else { return }
         do {
             let floors = try projects[p].floorsForPlanning(ids)
@@ -80,9 +79,7 @@ extension Workspace.State {
             let plans = try floors.map { try $0.makePlan() }
             commitPlans(plans, floors: floors, projectIndex: p)
         } catch {
-            if reportProjectError || error is PlanningScopeError {
-                projects[p].error = error.localizedDescription
-            }
+            if ids.count != 1 { projects[p].error = error.localizedDescription }
             for f in projects[p].floors.indices where ids.contains(projects[p].floors[f].id) {
                 projects[p].floors[f].error = error.localizedDescription
             }
