@@ -461,13 +461,13 @@ private struct ScanSceneView: View {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
             }
             ForEach(furniture) { item in
-                if !item.hidden {
-                    VStack(alignment: .leading) {
-                        Text(item.name).font(.headline)
-                        Text("Wymiary: \(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm")
-                        Text(item.state == .existing ? "Stan: istniejący" : "Stan: planowany")
-                        Text("Pochodzenie: \(item.provenance ?? "niezapisane w modelu")")
-                    }
+                VStack(alignment: .leading) {
+                    Text(item.name).font(.headline)
+                    Text(item.hidden ? "Mebel ukryty" : "Mebel widoczny")
+                    Text("Pozycja: X \(item.origin.xMm), Y \(item.origin.yMm), Z \(item.origin.zMm) mm")
+                    Text("Wymiary: \(item.size.xMm) × \(item.size.yMm) × \(item.size.zMm) mm")
+                    Text(item.state == .existing ? "Stan: istniejący" : "Stan: planowany")
+                    Text("Pochodzenie: \(item.provenance ?? "niezapisane w modelu")")
                 }
             }
             Text(RoomPlanStructureSource.unverifiedAccuracyDisclosure)
