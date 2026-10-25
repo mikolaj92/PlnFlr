@@ -54,9 +54,9 @@ import Testing
     let floor = Workspace.Floor.State(id: UUID(), name: "Salon", room: captured.rooms[0].room,
                                      thresholds: captured.rooms[0].thresholds, windows: captured.rooms[0].windows)
     let sourceUsdz = twoFloorUsdz()
-    let project = Workspace.Project.State(id: UUID(), name: "Dom", scans: [
-        .init(id: UUID(), label: "Parter", rooms: captured.rooms, sourceUsdz: sourceUsdz)
-    ], floors: [floor], selectedFloorIDs: [floor.id])
+    var project = Workspace.Project.State(id: UUID(), name: "Dom", scans: [.init(id: UUID(), label: "Parter", rooms: captured.rooms, sourceUsdz: sourceUsdz)], floors: [floor], selectedFloorIDs: [floor.id],
+        rooms: [ProjectRoom(id: floor.roomID, name: "Salon", storeyID: "parter")], storeys: [ProjectStorey(id: "parter", name: "Parter", elevationMm: -250)])
+    project.planningScope = .storey("parter")
     let state = Workspace.State(projects: [project], selectedProjectID: project.id)
     try storage.save(WorkspaceArchive(state))
     let restored = try storage.load().state
