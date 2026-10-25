@@ -202,6 +202,7 @@ public struct WorkspaceStorage: Sendable {
 
     private func validate(_ archive: WorkspaceArchive) throws {
         guard archive.version == 1 else { throw ArchiveError.unsupportedVersion }
+        guard Set(archive.projects.map(\.id)).count == archive.projects.count else { throw MaterialInputError.invalid }
         for project in archive.projects {
             guard Set(project.furniture.map(\.id)).count == project.furniture.count else { throw MaterialInputError.invalid }
             for item in project.furniture {
