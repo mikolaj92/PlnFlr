@@ -759,7 +759,7 @@ public struct Workspace {
             case .planSelectedFloorsButtonTapped(let projectID):
                 guard let project = state.projects.first(where: { $0.id == projectID }) else { return }
                 do {
-                    state.planFloors(try project.resolvePlanningScope().map(\.id), projectID: projectID)
+                    state.planFloors(try project.resolvePlanningScope().map(\.id), projectID: projectID, isScopePlanning: true)
                 } catch {
                     if let p = state.projects.firstIndex(where: { $0.id == projectID }) {
                         state.projects[p].error = error.localizedDescription
